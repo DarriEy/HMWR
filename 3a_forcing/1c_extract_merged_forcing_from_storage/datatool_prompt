@@ -1,0 +1,28 @@
+./extract-dataset.sh  \
+  --dataset="era5" \
+  --dataset-dir="/project/6079554/data/meteorological-data/era5" \
+  --output-dir="$HOME/era5_outputs/" \
+  --start-date="2001-01-01 00:00:00" \
+  --end-date="2018-12-31 23:00:00" \
+  --lat-lims=64,66  \
+  --lon-lims=-147,-144 \
+  --variable="RDRS_v2.1_P_FI_SFC,RDRS_v2.1_P_FB_SFC,RDRS_v2.1_A_PR0_SFC,RDRS_v2.1_P_P0_SFC,RDRS_v2.1_P_TT_1.5m,RDRS_v2.1_P_HU_1.5m,RDRS_v2.1_P_UVC_10m,RDRS_v2.1_P_UUC_10m,RDRS_v2.1_P_GZ_SFC" \
+  --prefix="Chena_Near_Two_Rivers_RDRSv21_"\
+  --submit-job\
+  --cache='$SLURM_TMPDIR'\
+  --account='def-mclark'
+
+
+
+
+
+
+--variable="longitude,latitude,time,LWRadAtm,SWRadAtm,pptrate,airpres,airtemp,spechum,windspd"\
+
+
+
+#List of variables from RDRS
+#"RDRS_v2.1_P_FI_SFC,RDRS_v2.1_P_FB_SFC,RDRS_v2.1_A_PR0_SFC,RDRS_v2.1_P_P0_SFC,RDRS_v2.1_P_TT_1.5m,RDRS_v2.1_P_HU_1.5m,RDRS_v2.1_P_UVC_10m,RDRS_v2.1_P_UUC_10m,RDRS_v2.1_P_GZ_SFC"
+
+#List of variables from ERA5
+#"longitude,latitude,time,LWRadAtm,SWRadAtm,pptrate,airpres,airtemp,spechum,windspd"\

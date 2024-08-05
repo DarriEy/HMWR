@@ -1,0 +1,3 @@
+Iteration,snowLayers,thCondSnow,f_Richards,groundwatr,bcLowrTdyn,bcLowrSoiH,thCondSoil,canopySrad,alb_method,windPrfile,astability,kge,kgep,nse,mae,rmse
+1,CLM_2010,tyen1965,moisture,qTopmodl,presTemp,drainage,funcSoilWet,noah_mp,conDecay,exponential,standard,-0.47790655458495723,-0.41095753689616354,-0.19001720172776193,29.43720427754071,40.6809517265844
+2,CLM_2010,tyen1965,moisture,qTopmodl,presTemp,drainage,funcSoilWet,noah_mp,conDecay,exponential,louisinv,-0.47790655458495723,-0.41095753689616354,-0.19001720172776193,29.43720427754071,40.6809517265844
