@@ -47,9 +47,9 @@ class Worker:
         self.logger.info(f"Worker {self.rank} started and waiting for tasks")
         while True:
             try:
-                self.logger.info(f"Worker {self.rank} waiting for next task")
+                #self.logger.info(f"Worker {self.rank} waiting for next task")
                 task = self.comm.recv(source=0, tag=MPI.ANY_TAG)
-                self.logger.info(f"Worker {self.rank} received task: {task}")
+                #self.logger.info(f"Worker {self.rank} received task: {task}")
                 if task is None:
                     self.logger.info(f"Worker {self.rank} received termination signal")
                     break
@@ -76,7 +76,7 @@ class Worker:
         """
         self.logger.info(f"Worker {self.rank} starting parameter evaluation")
         try:
-            self.logger.info(f"Worker {self.rank} received params: {params}")
+            #self.logger.info(f"Worker {self.rank} received params: {params}")
             model_output_path = self.run_models(params)
             if model_output_path is None:
                 return {'params': params, 'calib_metrics': None, 'eval_metrics': None, 'objective': float('inf')}

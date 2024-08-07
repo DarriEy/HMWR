@@ -114,12 +114,10 @@ class Optimizer:
                 if response is not None and isinstance(response, tuple):
                     params, result = response
                     if 'calib_metrics' in result:
-                        # Extract multiple objective values
                         obj_values = [-result['calib_metrics'].get(metric, float('-inf')) if metric in ['KGE', 'KGEp', 'KGEnp', 'NSE'] else result['calib_metrics'].get(metric, float('inf')) for metric in self.config.optimization_metrics]
                         chunk_results.append(obj_values)
-                        self.results.log_iteration_results(params, result)
                         if self.rank == 0:
-                            self.results.update_results(params, result)
+                            self.results.process_iteration_results(params, result)
                     else:
                         chunk_results.append([float('inf')] * len(self.config.optimization_metrics))
                 else:
@@ -200,9 +198,10 @@ class Optimizer:
 
     def run_ostrich_optimization(self):
         self.prepare_ostrich_files()
-        
+        ostrich_path = f"/{self.config.ostrich_path}/{self.config.ostrich_exe}"
+
         # Run OSTRICH
-        subprocess.run(["path/to/ostrich", "ostrich.txt"], check=True)
+        subprocess.run([ostrich_path, "ostrich.txt"], check=True)
         
         # Parse OSTRICH results
         best_params, best_value = self.parse_ostrich_results()

@@ -23,6 +23,7 @@ import os
 import whitebox # type: ignore
 import inspect
 from rasterio import features # type: ignore
+from scipy.ndimage import uniform_filter # type: ignore
 
 def create_pour_point_shapefile(config, logger):
     logger.info("Creating pour point shapefile")
@@ -471,7 +472,7 @@ def round_bounding_box(coords):
     return control_string, rounded_lat, rounded_lon
 
 def update_control_file_bounding_box(config, bounding_box):
-    control_file_path = Path(config.root_path) / f"domain_{config.domain_name}" / "_workflow_log" / config.source_control_file
+    control_file_path = Path(config.root_code_path) / f"0_control_files" / config.source_control_file
     
     try:
         with open(control_file_path, 'r') as file:
@@ -523,7 +524,6 @@ def _use_grus_as_hrus(config, logger):
     hru_output_shapefile = Path(config.root_path) / f"domain_{config.domain_name}" / "shapefiles" / "catchment" / f"{config.domain_name}_HRUs.shp"
 
     gru_gdf = gpd.read_file(gru_shapefile)
-    gru_gdf['hruId'] = gru_gdf['COMID']
     gru_gdf['hruNo'] = range(1, len(gru_gdf) + 1)
     gru_gdf['area'] = gru_gdf.to_crs(gru_gdf.estimate_utm_crs()).area / 1e6  # area in km²
     gru_gdf['hru_type'] = 'GRU'
@@ -566,15 +566,8 @@ def prepare_hru_parameters(config, logger):
         gdf['center_lon'] = centroids.x
         gdf['center_lat'] = centroids.y
 
-        # Set GRU_ID and HRU_ID
-        gdf['GRU_ID'] = gdf['COMID']
-        if 'hruNo' in gdf.columns:
-            gdf['HRU_ID'] = gdf['hruNo']
-        else:
-            gdf['HRU_ID'] = gdf['COMID']
-
         # Select and order columns
-        gdf = gdf[['GRU_ID', 'HRU_ID', 'HRU_area', 'center_lon', 'center_lat', 'geometry']]
+        gdf = gdf[['HRU_area', 'center_lon', 'center_lat', 'geometry']]
 
         # Project back to original CRS
         gdf = gdf.to_crs(original_crs)
@@ -620,6 +613,7 @@ def _generate_elevation_based_hrus(config, logger):
         dem_raster = Path(config.root_path) / f"domain_{config.domain_name}" / "parameters" / "dem" / "5_elevation" / config.parameter_dem_tif_name
         output_shapefile = Path(config.root_path) / f"domain_{config.domain_name}" / "shapefiles" / "catchment" / f"{config.domain_name}_HRUs_elevation.shp"
         output_plot = Path(config.root_path) / f"domain_{config.domain_name}" / "plots" / "catchment" / f"{config.domain_name}_HRUs_elevation.png"
+        gru_plot = Path(config.root_path) / f"domain_{config.domain_name}" / "plots" / "catchment" / f"{config.domain_name}_GRUs.png"
         elevation_band_size = float(config.elevation_band_size)
         min_hru_size = float(config.min_hru_size)
 
@@ -627,6 +621,7 @@ def _generate_elevation_based_hrus(config, logger):
         logger.info(f"DEM Raster: {dem_raster}")
         logger.info(f"Output Shapefile: {output_shapefile}")
         logger.info(f"Output Plot: {output_plot}")
+        logger.info(f"GRU Plot: {gru_plot}")
         logger.info(f"Elevation Band Size: {elevation_band_size}")
         logger.info(f"Minimum HRU Size: {min_hru_size}")
 
@@ -637,19 +632,24 @@ def _generate_elevation_based_hrus(config, logger):
             raise FileNotFoundError(f"Input DEM raster not found: {dem_raster}")
 
         gru_gdf, elevation_thresholds = _read_and_prepare_data(gru_shapefile, dem_raster, elevation_band_size)
+        
+        # Plot and save input GRUs
+        _plot_grus(gru_gdf, gru_plot, 'Input GRUs')
+        logger.info(f"Input GRU plot saved to: {gru_plot}")
+
         hru_gdf = _process_hrus(gru_gdf, dem_raster, elevation_thresholds)
 
         if hru_gdf is not None and not hru_gdf.empty:
             logger.info(f"Initial HRUs created: {len(hru_gdf)}")
 
-            hru_gdf = _merge_small_hrus(hru_gdf, min_hru_size, logger)
+            hru_gdf = _merge_small_hrus(hru_gdf, min_hru_size, logger, class_column='elevClass')
         
             # Ensure all geometries are valid polygons
             hru_gdf['geometry'] = hru_gdf['geometry'].apply(_clean_geometries)
             hru_gdf = hru_gdf[hru_gdf['geometry'].notnull()]
             
             # Remove any columns that might cause issues with shapefiles
-            columns_to_keep = ['geometry', 'gruNo', 'gruId', 'elevClass', 'avg_elevation', 'area', 'hruNo', 'hruId', 'cent_lon', 'cent_lat', 'COMID']
+            columns_to_keep = ['geometry', 'gruNo', 'gruId', 'elevClass', 'avg_elevation', 'area', 'hruNo', 'hruId', 'cent_lon', 'cent_lat']
             hru_gdf = hru_gdf[columns_to_keep]
             
             # Rename columns to ensure they're not too long for shapefiles
@@ -773,28 +773,17 @@ def _create_hrus(row, dem_raster, elevation_thresholds):
             **gru_attributes  # Include all GRU attributes except geometry
         }]
 
-def _merge_small_hrus(hru_gdf, min_hru_size, logger):
-    # Project to UTM for accurate area calculations
+def _merge_small_hrus(hru_gdf, min_hru_size, logger, class_column='elevClass'):
     hru_gdf.set_crs(epsg=4326, inplace=True)
     utm_crs = hru_gdf.estimate_utm_crs()
-    
     hru_gdf_utm = hru_gdf.to_crs(utm_crs)
     
-    # Clean geometries before processing
     hru_gdf_utm['geometry'] = hru_gdf_utm['geometry'].apply(_clean_geometries)
     hru_gdf_utm = hru_gdf_utm[hru_gdf_utm['geometry'].notnull()]
     
-    # Preserve original domain boundary
-    try:
-        original_boundary = unary_union(hru_gdf_utm.geometry)
-    except Exception as e:
-        logger.error(f"Error creating original boundary: {str(e)}")
-        original_boundary = None
+    original_boundary = unary_union(hru_gdf_utm.geometry)
     
-    # Calculate areas
-    hru_gdf_utm['area'] = hru_gdf_utm.geometry.area / 1_000_000  # Convert m² to km²
-    
-    # Sort HRUs by area
+    hru_gdf_utm['area'] = hru_gdf_utm.geometry.area / 1_000_000
     hru_gdf_utm = hru_gdf_utm.sort_values('area')
     
     merged_count = 0
@@ -808,7 +797,6 @@ def _merge_small_hrus(hru_gdf, min_hru_size, logger):
             try:
                 small_hru_geom = _clean_geometries(small_hru.geometry)
                 if small_hru_geom is None:
-                    logger.warning(f"Invalid geometry for HRU {idx}. Skipping.")
                     hru_gdf_utm = hru_gdf_utm.drop(idx)
                     continue
 
@@ -817,122 +805,110 @@ def _merge_small_hrus(hru_gdf, min_hru_size, logger):
                     largest_neighbor = neighbors.loc[neighbors['area'].idxmax()]
                     largest_neighbor_geom = _clean_geometries(largest_neighbor.geometry)
                     if largest_neighbor_geom is None:
-                        logger.warning(f"Invalid geometry for largest neighbor of HRU {idx}. Skipping.")
                         continue
 
                     merged_geometry = unary_union([small_hru_geom, largest_neighbor_geom])
                     merged_geometry = _simplify_geometry(merged_geometry)
                     
-                    # Update the largest neighbor's geometry and area
-                    hru_gdf_utm.at[largest_neighbor.name, 'geometry'] = merged_geometry
-                    hru_gdf_utm.at[largest_neighbor.name, 'area'] = merged_geometry.area / 1_000_000
-                    
-                    # Remove the small HRU
-                    hru_gdf_utm = hru_gdf_utm.drop(idx)
-                    merged_count += 1
-                    progress = True
+                    if merged_geometry and merged_geometry.is_valid:
+                        hru_gdf_utm.at[largest_neighbor.name, 'geometry'] = merged_geometry
+                        hru_gdf_utm.at[largest_neighbor.name, 'area'] = merged_geometry.area / 1_000_000
+                        hru_gdf_utm = hru_gdf_utm.drop(idx)
+                        merged_count += 1
+                        progress = True
                 else:
-                    # If no neighbors found, find the nearest HRU and merge
                     distances = hru_gdf_utm.geometry.distance(small_hru_geom)
                     nearest_hru = hru_gdf_utm.loc[distances.idxmin()]
                     if nearest_hru.name != idx:
                         nearest_hru_geom = _clean_geometries(nearest_hru.geometry)
                         if nearest_hru_geom is None:
-                            logger.warning(f"Invalid geometry for nearest HRU of {idx}. Skipping.")
                             continue
                         
                         merged_geometry = unary_union([small_hru_geom, nearest_hru_geom])
                         merged_geometry = _simplify_geometry(merged_geometry)
                         
-                        # Update the nearest HRU's geometry and area
-                        hru_gdf_utm.at[nearest_hru.name, 'geometry'] = merged_geometry
-                        hru_gdf_utm.at[nearest_hru.name, 'area'] = merged_geometry.area / 1_000_000
-                        
-                        # Remove the small HRU
-                        hru_gdf_utm = hru_gdf_utm.drop(idx)
-                        merged_count += 1
-                        progress = True
+                        if merged_geometry and merged_geometry.is_valid:
+                            hru_gdf_utm.at[nearest_hru.name, 'geometry'] = merged_geometry
+                            hru_gdf_utm.at[nearest_hru.name, 'area'] = merged_geometry.area / 1_000_000
+                            hru_gdf_utm = hru_gdf_utm.drop(idx)
+                            merged_count += 1
+                            progress = True
             except Exception as e:
                 logger.error(f"Error merging HRU {idx}: {str(e)}")
-                logger.error(f"Small HRU geometry: {small_hru.geometry.wkt}")
-                if len(neighbors) > 0:
-                    logger.error(f"Largest neighbor geometry: {largest_neighbor.geometry.wkt}")
         
         if not progress:
             break
         
-        # Recalculate areas and sort
         hru_gdf_utm['area'] = hru_gdf_utm.geometry.area / 1_000_000
         hru_gdf_utm = hru_gdf_utm.sort_values('area')
     
-    # Fill gaps
-    if original_boundary is not None:
-        try:
-            gaps = original_boundary.difference(unary_union(hru_gdf_utm.geometry))
-            if not gaps.is_empty:
-                for gap in gaps.geoms:
-                    nearest_hru = hru_gdf_utm.geometry.distance(gap).idxmin()
-                    hru_gdf_utm.at[nearest_hru, 'geometry'] = _clean_geometries(unary_union([hru_gdf_utm.at[nearest_hru, 'geometry'], gap]))
-        except Exception as e:
-            logger.error(f"Error filling gaps: {str(e)}")
+    # Ensure complete coverage
+    current_coverage = unary_union(hru_gdf_utm.geometry)
+    gaps = original_boundary.difference(current_coverage)
+    if not gaps.is_empty:
+        if gaps.geom_type == 'MultiPolygon':
+            gap_geoms = list(gaps.geoms)
+        else:
+            gap_geoms = [gaps]
+        
+        for gap in gap_geoms:
+            if gap.area > 0:
+                nearest_hru = hru_gdf_utm.geometry.distance(gap.centroid).idxmin()
+                merged_geom = _clean_geometries(unary_union([hru_gdf_utm.at[nearest_hru, 'geometry'], gap]))
+                if merged_geom and merged_geom.is_valid:
+                    hru_gdf_utm.at[nearest_hru, 'geometry'] = merged_geom
+                    hru_gdf_utm.at[nearest_hru, 'area'] = merged_geom.area / 1_000_000
     
-    # Update HRU numbers and IDs
     hru_gdf_utm = hru_gdf_utm.reset_index(drop=True)
     hru_gdf_utm['hruNo'] = range(1, len(hru_gdf_utm) + 1)
-    hru_gdf_utm['hruId'] = hru_gdf_utm['gruId'] + '_' + hru_gdf_utm['elevClass'].astype(str)
-    
-    # Recalculate final areas
+    hru_gdf_utm['hruId'] = hru_gdf_utm['gruId'] + '_' + hru_gdf_utm[class_column].astype(str)
     hru_gdf_utm['area'] = hru_gdf_utm.geometry.area / 1_000_000
     
-    # Project back to WGS84
     hru_gdf_merged = hru_gdf_utm.to_crs(hru_gdf.crs)
     
     return hru_gdf_merged
 
 def _clean_geometries(geometry):
-    if geometry.is_empty:
+    if geometry is None or geometry.is_empty:
         return None
-    if isinstance(geometry, (Polygon, MultiPolygon)):
-        if geometry.is_valid:
-            return geometry
-        else:
-            return geometry.buffer(0)
-    elif isinstance(geometry, LineString):
-        return Polygon(geometry).buffer(0)
-    elif isinstance(geometry, Point):
-        return geometry.buffer(1e-6)
-    else:
-        try:
-            return MultiPolygon(polygonize(geometry)).buffer(0)
-        except:
-            return None
-
-def _find_neighbors(geometry, gdf, current_index, buffer_distance=1e-2):
     try:
-        # Simplify the geometry
+        if not geometry.is_valid:
+            geometry = geometry.buffer(0)
+        if geometry.geom_type == 'MultiPolygon':
+            geometry = geometry.buffer(0).buffer(0)
+        return geometry if geometry.is_valid and not geometry.is_empty else None
+    except Exception:
+        return None
+
+def _find_neighbors(geometry, gdf, current_index, buffer_distance=1e-0):
+    try:
+        if geometry is None or not geometry.is_valid:
+            return gpd.GeoDataFrame()
+        
         simplified_geom = _simplify_geometry(geometry)
         buffered = simplified_geom.buffer(buffer_distance)
         
-        # Find neighbors using spatial index for efficiency
         possible_matches_index = list(gdf.sindex.intersection(buffered.bounds))
         possible_matches = gdf.iloc[possible_matches_index]
-        precise_matches = possible_matches[possible_matches.intersects(buffered)]
+        precise_matches = possible_matches[possible_matches.geometry.is_valid & possible_matches.geometry.intersects(buffered)]
         
         return precise_matches[precise_matches.index != current_index]
     except Exception as e:
         print(f"Error finding neighbors for HRU {current_index}: {str(e)}")
         return gpd.GeoDataFrame()
 
-def _simplify_geometry(geom, tolerance=0.0001):
-    """Simplify the geometry to reduce complexity while preserving shape."""
-    if geom.is_empty:
-        return geom
-    if geom.geom_type == 'MultiPolygon':
-        parts = [part for part in geom.geoms if part.is_valid and not part.is_empty]
-        if len(parts) == 0:
-            return Polygon()
-        return MultiPolygon(parts).simplify(tolerance, preserve_topology=True)
-    return geom.simplify(tolerance, preserve_topology=True)
+def _simplify_geometry(geom, tolerance=0.0000000001):
+    if geom is None or geom.is_empty:
+        return None
+    try:
+        if geom.geom_type == 'MultiPolygon':
+            parts = [part for part in geom.geoms if part.is_valid and not part.is_empty]
+            if len(parts) == 0:
+                return None
+            return MultiPolygon(parts).simplify(tolerance, preserve_topology=True)
+        return geom.simplify(tolerance, preserve_topology=True)
+    except Exception:
+        return None
 
 def _to_polygon(geom):
     if isinstance(geom, MultiPolygon):
@@ -941,6 +917,27 @@ def _to_polygon(geom):
         else:
             return geom.buffer(0)
     return geom
+
+def _plot_grus(gru_gdf, output_file, title):
+    fig, ax = plt.subplots(figsize=(15, 15))
+    
+    # Plot GRUs
+    gru_gdf.plot(column='gruId', cmap='tab20', ax=ax)
+    
+    ax.set_title(title)
+    plt.axis('off')
+    
+    # Add a custom colorbar legend
+    sm = plt.cm.ScalarMappable(cmap='tab20', norm=plt.Normalize(vmin=gru_gdf['gruId'].min(), vmax=gru_gdf['gruId'].max()))
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, orientation='vertical', aspect=30, pad=0.08)
+    cbar.set_label('GRU ID')
+    
+    plt.tight_layout()
+    # Create the directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    plt.close()
 
 def _plot_hrus(hru_gdf, output_file, class_column, title):
     fig, ax = plt.subplots(figsize=(15, 15))
@@ -993,14 +990,14 @@ def _generate_soil_class_based_hrus(config, logger):
         if hru_gdf is not None and not hru_gdf.empty:
             logger.info(f"Initial HRUs created: {len(hru_gdf)}")
 
-            hru_gdf = _merge_small_hrus(hru_gdf, min_hru_size)
-        
+            hru_gdf = _merge_small_hrus(hru_gdf, min_hru_size, logger, class_column='soilClass')
+    
             # Ensure all geometries are valid polygons
             hru_gdf['geometry'] = hru_gdf['geometry'].apply(_clean_geometries)
             hru_gdf = hru_gdf[hru_gdf['geometry'].notnull()]
             
             # Remove any columns that might cause issues with shapefiles
-            columns_to_keep = ['geometry', 'gruNo', 'gruId', 'soilClass', 'area', 'hruNo', 'hruId', 'cent_lon', 'cent_lat', 'COMID']
+            columns_to_keep = ['geometry', 'gruNo', 'gruId', 'soilClass', 'area', 'hruNo', 'hruId', 'cent_lon', 'cent_lat']
             hru_gdf = hru_gdf[columns_to_keep]
 
             # Final check for valid polygons
@@ -1128,7 +1125,7 @@ def _generate_land_class_based_hrus(config, logger):
     try:
         # Read necessary parameters
         gru_shapefile = Path(config.root_path) / f"domain_{config.domain_name}" / "shapefiles" / "river_basins" / f"{config.domain_name}_basins.shp"
-        land_raster = Path(config.root_path) / f"domain_{config.full_domain_name}" / "parameters" / "landclass" / "7_mode_land_class" / config.parameter_land_tif_name
+        land_raster = Path(config.root_path) / f"domain_{config.domain_name}" / "parameters" / "landclass" / "7_mode_land_class" / config.parameter_land_tif_name
         output_shapefile = Path(config.root_path) / f"domain_{config.domain_name}" / "shapefiles" / "catchment" / f"{config.domain_name}_HRUs_land.shp"
         output_plot = Path(config.root_path) / f"domain_{config.domain_name}" / "plots" / "catchment" / f"{config.domain_name}_HRUs_land.png"
 
@@ -1152,7 +1149,7 @@ def _generate_land_class_based_hrus(config, logger):
         if hru_gdf is not None and not hru_gdf.empty:
             logger.info(f"Initial HRUs created: {len(hru_gdf)}")
 
-            hru_gdf = _merge_small_hrus(hru_gdf, min_hru_size)
+            hru_gdf = _merge_small_hrus(hru_gdf, min_hru_size, logger, class_column='landClass')
         
             # Ensure all geometries are valid polygons
             hru_gdf['geometry'] = hru_gdf['geometry'].apply(_clean_geometries)
@@ -1256,7 +1253,6 @@ def _generate_radiation_based_hrus(config, logger):
     logger.info("Generating radiation-based HRUs")
 
     try:
-        # Read necessary parameters
         gru_shapefile = Path(config.root_path) / f"domain_{config.domain_name}" / "shapefiles" / "river_basins" / f"{config.domain_name}_basins.shp"
         dem_raster = Path(config.root_path) / f"domain_{config.domain_name}" / "parameters" / "dem" / "5_elevation" / config.parameter_dem_tif_name
         radiation_raster = Path(config.root_path) / f"domain_{config.domain_name}" / "parameters" / "radiation" / "annual_radiation.tif"
@@ -1274,36 +1270,28 @@ def _generate_radiation_based_hrus(config, logger):
         logger.info(f"Minimum HRU Size: {min_hru_size}")
         logger.info(f"Number of Radiation Classes: {radiation_class_number}")
 
-        # Check if input files exist
-        if not gru_shapefile.exists():
-            raise FileNotFoundError(f"Input GRU shapefile not found: {gru_shapefile}")
-        if not dem_raster.exists():
-            raise FileNotFoundError(f"Input DEM raster not found: {dem_raster}")
-
-        # Generate or load radiation raster
         if not radiation_raster.exists():
             logger.info("Annual radiation raster not found. Calculating radiation...")
-            radiation_raster = _calculate_annual_radiation(dem_raster, radiation_raster)
+            radiation_raster = _calculate_annual_radiation(dem_raster, radiation_raster, logger)
+            if radiation_raster is None:
+                raise ValueError("Failed to calculate annual radiation")
         else:
             logger.info(f"Annual radiation raster found at {radiation_raster}")
 
         gru_gdf, radiation_thresholds = _read_and_prepare_radiation_data(gru_shapefile, radiation_raster, radiation_class_number)
-        hru_gdf = _process_radiation_hrus(gru_gdf, radiation_raster, radiation_thresholds)
+        hru_gdf = _process_radiation_hrus(gru_gdf, radiation_raster, radiation_thresholds, logger)
 
         if hru_gdf is not None and not hru_gdf.empty:
             logger.info(f"Initial HRUs created: {len(hru_gdf)}")
 
-            hru_gdf = _merge_small_hrus(hru_gdf, min_hru_size)
+            hru_gdf = _merge_small_hrus(hru_gdf, min_hru_size, logger, class_column='radiationClass')
         
-            # Ensure all geometries are valid polygons
             hru_gdf['geometry'] = hru_gdf['geometry'].apply(_clean_geometries)
             hru_gdf = hru_gdf[hru_gdf['geometry'].notnull()]
             
-            # Remove any columns that might cause issues with shapefiles
             columns_to_keep = ['geometry', 'gruNo', 'gruId', 'radiationClass', 'avg_radiation', 'area', 'hruNo', 'hruId', 'cent_lon', 'cent_lat', 'COMID']
             hru_gdf = hru_gdf[columns_to_keep]
 
-            # Final check for valid polygons
             valid_polygons = []
             for idx, row in hru_gdf.iterrows():
                 geom = row['geometry']
@@ -1314,7 +1302,6 @@ def _generate_radiation_based_hrus(config, logger):
             
             hru_gdf = gpd.GeoDataFrame(valid_polygons, crs=hru_gdf.crs)
 
-            # Save as Shapefile
             hru_gdf['geometry'] = hru_gdf['geometry'].apply(_to_polygon)     
             
             hru_gdf.to_file(output_shapefile)
@@ -1328,70 +1315,80 @@ def _generate_radiation_based_hrus(config, logger):
     except Exception as e:
         logger.error(f"An error occurred during radiation-based HRU generation: {str(e)}", exc_info=True)
 
-def _calculate_annual_radiation(dem_raster: Path, radiation_raster: Path) -> Path:
-    """
-    Calculate annual radiation based on DEM and save it as a new raster.
-    """
-    with rasterio.open(dem_raster) as src:
-        dem = src.read(1)
-        transform = src.transform
-        crs = src.crs
-        bounds = src.bounds
+def _calculate_annual_radiation(dem_raster: Path, radiation_raster: Path, logger) -> Path:
+    """Calculate annual radiation based on DEM and save it as a new raster."""
+    logger.info(f"Calculating annual radiation from DEM: {dem_raster}")
     
-    center_lat = (bounds.bottom + bounds.top) / 2
-    center_lon = (bounds.left + bounds.right) / 2
-
-    # Calculate slope and aspect
-    dy, dx = np.gradient(dem)
-    slope = np.arctan(np.sqrt(dx*dx + dy*dy))
-    aspect = np.arctan2(-dx, dy)
-
-    # Create a DatetimeIndex for the entire year (daily)
-    times = pd.date_range(start='2019-01-01', end='2019-12-31', freq='D')
+    try:
+        with rasterio.open(dem_raster) as src:
+            dem = src.read(1)
+            transform = src.transform
+            crs = src.crs
+            bounds = src.bounds
+        
+        logger.info(f"DEM shape: {dem.shape}, CRS: {crs}, Bounds: {bounds}")
+        
+        center_lat = (bounds.bottom + bounds.top) / 2
+        center_lon = (bounds.left + bounds.right) / 2
+        
+        # Calculate slope and aspect
+        dy, dx = np.gradient(dem)
+        slope = np.arctan(np.sqrt(dx*dx + dy*dy))
+        aspect = np.arctan2(-dx, dy)
+        
+        # Create a DatetimeIndex for the entire year (daily)
+        times = pd.date_range(start='2019-01-01', end='2019-12-31', freq='D')
+        
+        # Create location object
+        location = pvlib.location.Location(latitude=center_lat, longitude=center_lon, altitude=np.mean(dem))
+        
+        # Calculate solar position
+        solar_position = location.get_solarposition(times=times)
+        
+        # Calculate clear sky radiation
+        clearsky = location.get_clearsky(times=times)
+        
+        # Initialize the radiation array
+        radiation = np.zeros_like(dem)
+        
+        logger.info("Calculating radiation for each pixel...")
+        for i in range(dem.shape[0]):
+            for j in range(dem.shape[1]):
+                surface_tilt = np.degrees(slope[i, j])
+                surface_azimuth = np.degrees(aspect[i, j])
+                
+                total_irrad = pvlib.irradiance.get_total_irradiance(
+                    surface_tilt, surface_azimuth,
+                    solar_position['apparent_zenith'], solar_position['azimuth'],
+                    clearsky['dni'], clearsky['ghi'], clearsky['dhi']
+                )
+                
+                radiation[i, j] = total_irrad['poa_global'].sum()
+        
+        logger.info(f"Radiation calculation complete. Shape: {radiation.shape}")
+        
+        # Save the radiation raster
+        radiation_raster.parent.mkdir(parents=True, exist_ok=True)
+        
+        with rasterio.open(radiation_raster, 'w', driver='GTiff',
+                        height=radiation.shape[0], width=radiation.shape[1],
+                        count=1, dtype=radiation.dtype,
+                        crs=crs, transform=transform) as dst:
+            dst.write(radiation, 1)
+        
+        logger.info(f"Radiation raster saved to: {radiation_raster}")
+        return radiation_raster
     
-    # Create location object
-    location = pvlib.location.Location(latitude=center_lat, longitude=center_lon, altitude=np.mean(dem))
-    
-    # Calculate solar position
-    solar_position = location.get_solarposition(times=times)
-    
-    # Calculate clear sky radiation
-    clearsky = location.get_clearsky(times=times)
-    
-    # Initialize the radiation array
-    radiation = np.zeros_like(dem)
-
-    # Calculate radiation for each pixel
-    for i in range(dem.shape[0]):
-        for j in range(dem.shape[1]):
-            surface_tilt = np.degrees(slope[i, j])
-            surface_azimuth = np.degrees(aspect[i, j])
-            
-            total_irrad = pvlib.irradiance.get_total_irradiance(
-                surface_tilt, surface_azimuth,
-                solar_position['apparent_zenith'], solar_position['azimuth'],
-                clearsky['dni'], clearsky['ghi'], clearsky['dhi']
-            )
-            
-            radiation[i, j] = total_irrad['poa_global'].sum()
-
-    # Save the radiation raster
-    radiation_raster.parent.mkdir(parents=True, exist_ok=True)
-    
-    with rasterio.open(radiation_raster, 'w', driver='GTiff',
-                    height=radiation.shape[0], width=radiation.shape[1],
-                    count=1, dtype=radiation.dtype,
-                    crs=crs, transform=transform) as dst:
-        dst.write(radiation, 1)
-
-    return radiation_raster
+    except Exception as e:
+        logger.error(f"Error calculating annual radiation: {str(e)}", exc_info=True)
+        return None
 
 def _read_and_prepare_radiation_data(gru_shapefile, radiation_raster, num_classes):
     gru_gdf = gpd.read_file(gru_shapefile).to_crs("EPSG:4326")
     if 'gruId' not in gru_gdf.columns:
         gru_gdf['gruId'] = gru_gdf.index.astype(str)
 
-    gru_gdf['geometry'] = gru_gdf['geometry'].apply(lambda geom: make_valid(geom))
+    gru_gdf['geometry'] = gru_gdf['geometry'].apply(lambda geom: geom if geom.is_valid else geom.buffer(0))
 
     with rasterio.open(radiation_raster) as src:
         radiation = src.read(1)
@@ -1400,55 +1397,94 @@ def _read_and_prepare_radiation_data(gru_shapefile, radiation_raster, num_classe
     
     return gru_gdf, radiation_thresholds
 
-def _process_radiation_hrus(gru_gdf, radiation_raster, radiation_thresholds):
+def _process_radiation_hrus(gru_gdf, radiation_raster, radiation_thresholds, logger):
     all_hrus = []
     
     num_cores = max(1, multiprocessing.cpu_count() // 2)
     
     with ProcessPoolExecutor(max_workers=num_cores) as executor:
-        future_to_row = {executor.submit(_create_radiation_hrus, row, radiation_raster, radiation_thresholds): row for _, row in gru_gdf.iterrows()}
+        future_to_row = {executor.submit(_create_radiation_hrus, row, radiation_raster, radiation_thresholds, logger): row for _, row in gru_gdf.iterrows()}
         for future in as_completed(future_to_row):
-            all_hrus.extend(future.result())
+            try:
+                hrus = future.result()
+                if hrus:
+                    all_hrus.extend(hrus)
+            except Exception as e:
+                logger.error(f"Error processing HRU: {str(e)}", exc_info=True)
+
+    if not all_hrus:
+        logger.error("No valid HRUs were created.")
+        return None
 
     hru_gdf = gpd.GeoDataFrame(all_hrus, crs=gru_gdf.crs)
     
+    if 'geometry' in hru_gdf.columns:
+        hru_gdf = hru_gdf.set_geometry('geometry')
+    else:
+        logger.error("No 'geometry' column found in the created GeoDataFrame.")
+        return None
+
     return _postprocess_hrus(hru_gdf)
 
-def _create_radiation_hrus(row, radiation_raster, radiation_thresholds):
-    with rasterio.open(radiation_raster) as src:
-        out_image, out_transform = mask(src, [row.geometry], crop=True, all_touched=True)
-        out_image = out_image[0]
-        
-        gru_attributes = row.drop('geometry').to_dict()
-        
-        hrus = []
-        for i in range(len(radiation_thresholds) - 1):
-            lower, upper = radiation_thresholds[i:i+2]
-            class_mask = (out_image >= lower) & (out_image < upper)
-            if np.any(class_mask):
-                shapes = rasterio.features.shapes(class_mask.astype(np.uint8), mask=class_mask, transform=out_transform)
-                class_polys = [shape(shp) for shp, _ in shapes]
+def _create_radiation_hrus(row, radiation_raster, radiation_thresholds, logger):
+    try:
+        with rasterio.open(radiation_raster) as src:
+            out_image, out_transform = rasterio.mask.mask(src, [row.geometry], crop=True, all_touched=True)
+            out_image = out_image[0]
+            
+            logger.debug(f"Original image shape: {out_image.shape}")
+            
+            gru_attributes = row.drop('geometry').to_dict()
+            
+            # Downsample the raster for faster processing
+            downsampled_image = uniform_filter(out_image, size=5)[::5, ::5]
+            
+            logger.debug(f"Downsampled image shape: {downsampled_image.shape}")
+            
+            hrus = []
+            for i in range(len(radiation_thresholds) - 1):
+                lower, upper = radiation_thresholds[i:i+2]
+                class_mask = (downsampled_image >= lower) & (downsampled_image < upper)
                 
-                if class_polys:
-                    merged_poly = unary_union(class_polys).intersection(row.geometry)
-                    if not merged_poly.is_empty:
-                        geoms = [merged_poly] if isinstance(merged_poly, Polygon) else merged_poly.geoms
-                        for geom in geoms:
-                            if isinstance(geom, Polygon):
-                                hrus.append({
-                                    'geometry': geom,
-                                    'gruNo': row.name,
-                                    'gruId': row['gruId'],
-                                    'radiationClass': i + 1,
-                                    'avg_radiation': np.mean(out_image[class_mask]),
-                                    **gru_attributes
-                                })
+                logger.debug(f"Class mask shape: {class_mask.shape}")
+                
+                if class_mask.shape != downsampled_image.shape:
+                    logger.warning(f"Shape mismatch: class_mask {class_mask.shape}, downsampled_image {downsampled_image.shape}")
+                    continue
+                
+                if np.any(class_mask):
+                    shapes = rasterio.features.shapes(class_mask.astype(np.uint8), mask=class_mask, transform=rasterio.Affine(out_transform.a * 5, 0, out_transform.c, 0, out_transform.e * 5, out_transform.f))
+                    class_polys = [shape(shp) for shp, _ in shapes]
+                    
+                    if class_polys:
+                        merged_poly = unary_union(class_polys).intersection(row.geometry)
+                        if not merged_poly.is_empty:
+                            geoms = [merged_poly] if isinstance(merged_poly, Polygon) else merged_poly.geoms
+                            for geom in geoms:
+                                if isinstance(geom, Polygon):
+                                    hru = {
+                                        'geometry': geom,
+                                        'gruNo': row.name,
+                                        'gruId': row['gruId'],
+                                        'radiationClass': i + 1,
+                                        'avg_radiation': np.mean(out_image[class_mask]),
+                                        **gru_attributes
+                                    }
+                                    hrus.append(hru)
+            
+            if not hrus:
+                logger.warning(f"No HRUs created for GRU {row['gruId']}. Using entire GRU as single HRU.")
+                return [{
+                    'geometry': row.geometry,
+                    'gruNo': row.name,
+                    'gruId': row['gruId'],
+                    'radiationClass': 1,
+                    'avg_radiation': np.mean(out_image),
+                    **gru_attributes
+                }]
+            
+            return hrus
         
-        return hrus if hrus else [{
-            'geometry': row.geometry,
-            'gruNo': row.name,
-            'gruId': row['gruId'],
-            'radiationClass': 1,
-            'avg_radiation': np.mean(out_image),
-            **gru_attributes
-        }]
+    except Exception as e:
+        logger.error(f"Error processing GRU {row['gruId']}: {str(e)}", exc_info=True)
+        return []

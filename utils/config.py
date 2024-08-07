@@ -84,6 +84,14 @@ class Config:
     ngsize: int
     dds_r: float
     diagnostic_frequency: int
+    snow_processed_path: Path
+    snow_processed_name: str
+    snow_station_shapefile_path: Path
+    snow_station_shapefile_name: str
+    MODIS_ndsi_threshold: int
+    catchment_shp_name: str
+    ostrich_path: str
+    ostrich_exe: str
 
 def initialize_config(rank: int, comm: MPI.Comm) -> Config:
     control_folder = Path('../../0_control_files')
@@ -105,7 +113,7 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         calib_period_str = read_from_control(control_folder/control_file, 'calibration_period')
         eval_period_str = read_from_control(control_folder/control_file, 'evaluation_period')
         calib_period = parse_time_period(calib_period_str)
-        eval_period = parse_time_period(eval_period_str)
+        eval_period = parse_time_period(eval_period_str) 
         optimization_metrics = read_from_control(control_folder/control_file, 'moo_optimization_metrics').split(',')
         pop_size = int(read_from_control(control_folder/control_file, 'moo_pop_size'))
         moo_num_iter = int(read_from_control(control_folder/control_file, 'moo_num_iter'))
@@ -120,12 +128,20 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         basin_bounds = [basin_bounds_dict[param] for param in basin_params_to_calibrate]
         all_bounds = local_bounds + basin_bounds
         all_params = params_to_calibrate + basin_params_to_calibrate
+        snow_processed_path = make_default_path(control_folder, control_file, 'observations/snow/preprocessed/')
+        snow_processed_name = read_from_control(control_folder/control_file, 'snow_processed_name')
+        snow_station_shapefile_path = make_default_path(control_folder, control_file, 'shapefiles/observations/')
+        snow_station_shapefile_name = read_from_control(control_folder/control_file, 'snow_station_shapefile_name')
 
         poplsize = int(read_from_control(control_folder/control_file, 'poplsize'))
         swrmsize = int(read_from_control(control_folder/control_file, 'swrmsize'))
         ngsize = int(read_from_control(control_folder/control_file, 'ngsize'))
         dds_r = float(read_from_control(control_folder/control_file, 'dds_r'))
         diagnostic_frequency = int(read_from_control(control_folder/control_file, 'diagnostic_frequency'))
+        MODIS_ndsi_threshold = int(read_from_control(control_folder/control_file, 'MODIS_ndsi_threshold'))
+        catchment_shp_name = read_from_control(control_folder/control_file, 'catchment_shp_name')
+        ostrich_path = read_from_control(control_folder/control_file, 'ostrich_path')
+        ostrich_exe = read_from_control(control_folder/control_file, 'ostrich_exe')
 
     else:
         root_path = None
@@ -158,6 +174,14 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         ngsize = None
         dds_r = None
         diagnostic_frequency = None
+        snow_processed_path = None
+        snow_processed_name = None
+        snow_station_shapefile_path = None
+        snow_station_shapefile_name = None
+        MODIS_ndsi_threshold = None
+        catchment_shp_name = None
+        ostrich_path = None
+        ostrich_exe = None
 
     config = Config(
         root_path=comm.bcast(root_path, root=0),
@@ -189,7 +213,15 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         swrmsize=comm.bcast(swrmsize, root=0),
         ngsize=comm.bcast(ngsize, root=0),
         dds_r=comm.bcast(dds_r, root=0),
-        diagnostic_frequency=comm.bcast(diagnostic_frequency,root=0)
+        diagnostic_frequency=comm.bcast(diagnostic_frequency,root=0),
+        snow_processed_path=comm.bcast(snow_processed_path, root=0),
+        snow_processed_name=comm.bcast(snow_processed_name, root=0),
+        snow_station_shapefile_path=comm.bcast(snow_station_shapefile_path, root=0),
+        snow_station_shapefile_name=comm.bcast(snow_station_shapefile_name, root=0),
+        MODIS_ndsi_threshold=comm.bcast(MODIS_ndsi_threshold, root=0),
+        catchment_shp_name=comm.bcast(catchment_shp_name, root=0),
+        ostrich_path=comm.bcast(ostrich_path, root=0),
+        ostrich_exe=comm.bcast(ostrich_exe, root=0)
     )
 
     return config
@@ -217,6 +249,22 @@ class preConfig:
     radiation_class_number: int
     domain_discretisation: str
     pour_point_shp_name: str
+    catchment_shp_name: str
+    parameter_soil_tif_name: str
+    root_code_path: str
+    parameter_land_tif_name: str
+    datatool_account: str
+    forcing_raw_time: str
+    num_land_cover: int 
+    minimume_land_fraction: float
+    num_soil_type: int                
+    unify_soil: bool                   
+    frac_threshold: float               
+    write_mizuroute_domain: bool       
+    soil_mLayerDepth: str             
+    snow_processed_path: Path
+    snow_processed_name: str
+    modis_ndsi_threshold: int
 
     @classmethod
     def from_control_file(cls, control_file: Path):
@@ -248,6 +296,22 @@ class preConfig:
         domain_discretisation = read_from_control(control_file, 'domain_discretisation')
         river_basin_shp_name = read_from_control(control_file, 'river_basin_shp_name')
         pour_point_shp_name = read_from_control(control_file, 'pour_point_shp_name')
+        catchment_shp_name = read_from_control(control_file, 'catchment_shp_name')
+        parameter_soil_tif_name = read_from_control(control_file, 'parameter_soil_tif_name')
+        root_code_path = read_from_control(control_file, 'root_code_path')
+        parameter_land_tif_name = read_from_control(control_file, 'parameter_land_tif_name')
+        datatool_account = read_from_control(control_file, 'datatool_account')
+        forcing_raw_time = read_from_control(control_file, 'forcing_raw_time')
+        num_land_cover = int(read_from_control(control_file, 'num_land_cover'))
+        minimume_land_fraction = float(read_from_control(control_file, 'minimume_land_fraction'))
+        num_soil_type = int(read_from_control(control_file, 'num_soil_type'))
+        unify_soil = bool(read_from_control(control_file, 'unify_soil'))
+        frac_threshold = float(read_from_control(control_file, 'frac_threshold'))
+        write_mizuroute_domain = bool(read_from_control(control_file, 'write_mizuroute_domain'))
+        soil_mLayerDepth = read_from_control(control_file, 'soil_mLayerDepth')
+        snow_processed_path = read_from_control(control_file, 'snow_processed_path')
+        snow_processed_name = read_from_control(control_file, 'snow_processed_name')
+        modis_ndsi_threshold = int(read_from_control(control_file, 'modis_ndsi_threshold'))
 
         return cls(
             root_path=root_path,
@@ -270,6 +334,27 @@ class preConfig:
             radiation_class_number=radiation_class_number,
             domain_discretisation=domain_discretisation, 
             river_basin_shp_name=river_basin_shp_name,
-            pour_point_shp_name=pour_point_shp_name
+            pour_point_shp_name=pour_point_shp_name,
+            catchment_shp_name=catchment_shp_name,
+            parameter_soil_tif_name=parameter_soil_tif_name,
+            root_code_path=root_code_path,
+            parameter_land_tif_name=parameter_land_tif_name,
+            datatool_account=datatool_account,
+            forcing_raw_time=forcing_raw_time,
+            num_land_cover=num_land_cover,
+            minimume_land_fraction=minimume_land_fraction,
+            num_soil_type=num_soil_type,
+            unify_soil=unify_soil,
+            frac_threshold=frac_threshold,
+            write_mizuroute_domain=write_mizuroute_domain,
+            soil_mLayerDepth=soil_mLayerDepth,
+            snow_processed_path=snow_processed_path,
+            snow_processed_name=snow_processed_name,
+            modis_ndsi_threshold=modis_ndsi_threshold
+
+
+
+
+
         )
    

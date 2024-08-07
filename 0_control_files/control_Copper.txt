@@ -62,7 +62,7 @@ fullDom_rivers_name         | riv_pfaf_81_MERIT_Hydro_v07_Basins_v01_bugfix1.shp
 # Forcing settings
 forcing_dataset		        | era5					                      # Selection of which forcing dataset to use, current options are era5, rdrs and carra (depending on geographical availability)
 forcing_raw_time            | 2010,2012                                   # Years to download: Jan-[from],Dec-[to].
-forcing_raw_space           | 63.33/-147.83/60.3/-139.87                  # Bounding box of the shapefile: lat_max/lon_min/lat_min/lon_max. Will be converted to ERA5 download coordinates in script. Order and use of '/' to separate values is mandatory.
+forcing_raw_space            | 63.63/-148.62/60.0/-139.07                                     # Bounding box of the shapefile: lat_max/lon_min/lat_min/lon_max. Will be converted to ERA5 download coordinates in script. Order and use of '/' to separate values is mandatory.
 forcing_time_step_size      | 3600                                        # Size of the forcing time step in [s]. Must be constant.
 forcing_measurement_height  | 3                                           # Reference height for forcing measurements [m].
 forcing_shape_path          | default                                     # If 'default', uses 'root_path/domain_[name]/shapefiles/forcing'.
@@ -86,6 +86,15 @@ datatool_output_dir         | default                                   # If 'de
 datatool_cache              | default                                   # If 'default', uses $SLURM_TMPDIR
 datatool_prefix             | default                                   # If 'default', uses [domain]_[dataset]
 datatool_path               | default                                   # If 'default', uses 'root_path/installs/datatool/.
+
+# MAF settings 
+num_land_cover               | 19
+minimume_land_fraction       | 0.05
+num_soil_type                | 12
+unify_soil                   | true
+frac_threshold               | 0.01
+write_mizuroute_domain       | true
+soil_mLayerDepth             | 0.1,0.25,0.5,2.15
 
 # Observation settings
 streamflow_raw_path         | default                                   # If 'default', uses 'root_path/domain_[name]/observations/streamflow/raw_data'.
@@ -218,11 +227,11 @@ nsga2_n_obj                 | 2                                           # Numb
 
 # Discretisation settings
 domain_subsetting	        | Merit					# Subset your domain based on existing delineations. Options: Merit, TDX, NWX, delineate
-domain_discretisation       | elevation             # Discretise your domain based on geospatial attributes, options: elevation, land_class, soil_class, radiation_class, none
+domain_discretisation       | radiation_class             # Discretise your domain based on geospatial attributes, options: elevation, land_class, soil_class, radiation_class, none
 stream_order_threshold      | 5                     # Strahler stream order threshold for discretising subbasins
-elevation_band_size 	    | 300  					# Elevation band size in meters
-min_hru_size 		        | 1.5  					                     # Minimum HRU size in square kilometers
-radiation_class_number      | 3                                          # Number of radiation classes to discretise
+elevation_band_size 	    | 250  					# Elevation band size in meters
+min_hru_size 		        | 1 					                     # Minimum HRU size in square kilometers
+radiation_class_number      | 6                                          # Number of radiation classes to discretise
 
 
 # Postprocessing settings

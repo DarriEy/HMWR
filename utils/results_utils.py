@@ -1,8 +1,6 @@
 # results_utils.py
-import os
-import csv
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 import pandas as pd # type: ignore
 import numpy as np # type: ignore
@@ -11,6 +9,7 @@ import matplotlib.pyplot as plt # type: ignore
 import xarray as xr # type: ignore
 import seaborn as sns # type: ignore
 import plotly.graph_objects as go # type: ignore
+import math
 
 class Results:
     def __init__(self, config: 'Config', logger: 'logging.Logger'):
@@ -33,15 +32,13 @@ class Results:
         return self.iteration_results_file
 
     def plot_objective_evolution(self, in_progress: bool = False) -> None:
-        """Plot the evolution of objective metrics."""
-        calib_metrics = ['KGE', 'KGEnp', 'KGEp', 'MAE', 'NSE', 'RMSE']
-        eval_metrics = ['Eval_KGE', 'Eval_KGEnp', 'Eval_KGEp', 'Eval_MAE', 'Eval_NSE', 'Eval_RMSE']
-        all_metrics = calib_metrics + eval_metrics
+        """Plot the evolution of objective metrics for calibration only."""
+        calib_metrics = ['Calib_KGE', 'Calib_KGEnp', 'Calib_KGEp', 'Calib_MAE', 'Calib_NSE', 'Calib_RMSE']
         
-        available_metrics = [m for m in all_metrics if m in self.results_df.columns]
+        available_metrics = [m for m in calib_metrics if m in self.results_df.columns]
         
         if not available_metrics:
-            self.logger.warning("No metrics available for plotting. Skipping objective evolution plot.")
+            self.logger.warning("No calibration metrics available for plotting. Skipping objective evolution plot.")
             return
 
         fig, axes = plt.subplots(len(available_metrics), 1, figsize=(12, 4*len(available_metrics)), sharex=True)
@@ -60,7 +57,7 @@ class Results:
                 ax.plot(self.results_df['Iteration'], self.results_df[metric].cummax(), 'r-', label='Best so far')
                 best_value = self.results_df[metric].max()
             
-            ax.set_ylabel(metric)
+            ax.set_ylabel(metric.replace('Calib_', ''))
             ax.grid(True)
             ax.legend()
             
@@ -68,13 +65,14 @@ class Results:
                     verticalalignment='top', fontweight='bold')
         
         axes[-1].set_xlabel('Iteration')
-        plt.suptitle('Evolution of Objective Metrics Over Iterations')
+        plt.suptitle('Evolution of Calibration Objective Metrics Over Iterations')
         plt.tight_layout()
         
         suffix = '_in_progress' if in_progress else '_final'
         plt.savefig(self.output_folder / f'objective_evolution{suffix}.png')
         plt.close()
 
+    '''
     def update_results(self, params: List[float], result: Dict[str, Any]) -> None:
         """Update results with new data and save to file."""
         new_row = pd.DataFrame({
@@ -86,8 +84,15 @@ class Results:
         
         self.results_df = pd.concat([self.results_df, new_row], ignore_index=True)
         
+        # Check if this is the new best result
+        current_best = self.results_df[f'{self.config.optimization_metric}'].max()
+        if result['calib_metrics'][self.config.optimization_metric] > current_best:
+            # Save the new best simulation
+            sim_data = self.load_simulation_data(params)  # You need to implement this method
+            self.save_best_simulation(params, sim_data)
+        
         # Save updated results to file
-        self.results_df.to_csv(self.iteration_results_file, index=False)
+        #self.results_df.to_csv(self.iteration_results_file, index=False)
         
         if self.iteration_count % self.config.diagnostic_frequency == 0:
             self.generate_in_progress_diagnostics()
@@ -108,9 +113,66 @@ class Results:
         self.results_df = pd.concat([self.results_df, new_row], ignore_index=True)
         
         self.write_iteration_results()
-        
+        self.update_results()
         #if self.iteration_count % self.config.diagnostic_frequency == 0:
             #self.generate_in_progress_diagnostics()
+    '''
+
+    def process_iteration_results(self, params: List[float], result: Dict[str, Any]) -> None:
+        """
+        Process, log, and update results for each iteration.
+        This method combines the functionality of update_results and log_iteration_results.
+
+        Args:
+            params (List[float]): The parameter set for this iteration.
+            result (Dict[str, Any]): The result dictionary containing metrics.
+        """
+        self.iteration_count += 1
+
+        new_row = pd.DataFrame({
+            **dict(zip(self.config.all_params, params)),
+            **{f'Calib_{k}': v for k, v in result.get('calib_metrics', {}).items()},
+            **{f'Eval_{k}': v for k, v in result.get('eval_metrics', {}).items()},
+            'Iteration': self.iteration_count
+        }, index=[0])
+        
+        self.results_df = pd.concat([self.results_df, new_row], ignore_index=True)
+        
+        # Log available metrics for debugging
+        #self.logger.debug(f"Available columns in results_df: {self.results_df.columns.tolist()}")
+        
+        # Check if this is the new best result
+        best_metric = f"Calib_{self.config.optimization_metric}"
+        if best_metric not in self.results_df.columns:
+            self.logger.warning(f"Metric '{best_metric}' not found in results. Available metrics: {self.results_df.columns.tolist()}")
+            return
+
+        if self.config.optimization_metric in ['RMSE', 'MAE']:
+            current_best = self.results_df[best_metric].min() if not self.results_df.empty else float('inf')
+            is_new_best = result['calib_metrics'][self.config.optimization_metric] < current_best
+        else:
+            current_best = self.results_df[best_metric].max() if not self.results_df.empty else float('-inf')
+            is_new_best = result['calib_metrics'][self.config.optimization_metric] > current_best
+
+        if is_new_best:
+            # Save the new best simulation
+            sim_data = self.load_simulation_data(params)  # This should be implemented to load the current simulation data
+            if sim_data is not None:
+                self.save_best_simulation(params, sim_data)
+            else:
+                self.logger.warning("Could not save best simulation: simulation data not available.")
+        
+        # Save updated results to file
+        self.results_df.to_csv(self.iteration_results_file, index=False)
+        
+        # Log the results
+        self.logger.info(f"Iteration {self.iteration_count} results:")
+        #self.logger.info(f"Parameters: {dict(zip(self.config.all_params, params))}")
+        #self.logger.info(f"Calibration metrics: {result.get('calib_metrics', {})}")
+        #self.logger.info(f"Evaluation metrics: {result.get('eval_metrics', {})}")
+        
+        if self.iteration_count % self.config.diagnostic_frequency == 0:
+            self.generate_in_progress_diagnostics()
 
     def write_iteration_results(self) -> None:
         """Write iteration results to the CSV file."""
@@ -158,11 +220,6 @@ class Results:
             f.write(f"Calibration: {final_result['calib_metrics']}\n")
             f.write(f"Evaluation: {final_result['eval_metrics']}\n")
 
-    def generate_in_progress_diagnostics(self) -> None:
-            """Generate and save diagnostics during the optimization process."""
-            self.plot_objective_evolution(in_progress=True)
-            self.plot_parameter_convergence(in_progress=True)
-
     def generate_final_diagnostics(self) -> None:
         """Generate and save final comprehensive diagnostics."""
         self.plot_objective_evolution()
@@ -177,32 +234,104 @@ class Results:
         """Save the final results dataframe to a CSV file."""
         self.results_df.to_csv(self.output_folder / 'final_results.csv', index=False)
 
-    def plot_comparison(self, ax: plt.Axes, sim_data: xr.DataArray, obs_data: pd.Series, 
-                        period: Tuple[str, str], title: str) -> None:
+    def plot_comparison(self, ax, obs_data, sim_data_list, period, title, labels):
         """
-        Plot the comparison between simulated and observed streamflow for a given period.
+        Plot the comparison between observed and multiple simulated streamflows for a given period.
 
         Args:
             ax (plt.Axes): The axes to plot on.
-            sim_data (xr.DataArray): The simulated streamflow data.
             obs_data (pd.Series): The observed streamflow data.
+            sim_data_list (List[xr.DataArray]): List of simulated streamflow data arrays.
             period (Tuple[str, str]): The start and end dates of the period to plot.
             title (str): The title for the subplot.
+            labels (List[str]): Labels for each simulation dataset.
         """
         start_date, end_date = period
         
-        # Slice the data for the specified period
-        sim_period = sim_data.sel(time=slice(start_date, end_date))
+        # Plot observed data
         obs_period = obs_data.loc[start_date:end_date]
+        ax.plot(obs_period.index, obs_period.values, label='Observed', color='black', linewidth=2)
 
-        # Plot the data
-        ax.plot(sim_period.time, sim_period.values, label='Simulated', color='blue')
-        ax.plot(obs_period.index, obs_period.values, label='Observed', color='red')
+        # Plot each simulation dataset
+        colors = plt.cm.rainbow(np.linspace(0, 1, len(sim_data_list)))
+        for sim_data, label, color in zip(sim_data_list, labels, colors):
+            sim_period = sim_data.sel(time=slice(start_date, end_date))
+            ax.plot(sim_period.time, sim_period.values, label=label, color=color, alpha=0.7)
 
         ax.set_ylabel('Streamflow (cms)')
         ax.set_title(title)
         ax.legend()
         ax.grid(True)
+
+    def plot_comparison(self, ax, obs_data, sim_data_list, period, title, labels):
+        """
+        Plot the comparison between observed and multiple simulated streamflows for a given period.
+
+        Args:
+            ax (plt.Axes): The axes to plot on.
+            obs_data (pd.Series): The observed streamflow data.
+            sim_data_list (List[xr.DataArray]): List of simulated streamflow data arrays.
+            period (Tuple[str, str]): The start and end dates of the period to plot.
+            title (str): The title for the subplot.
+            labels (List[str]): Labels for each simulation dataset.
+        """
+        start_date, end_date = period
+        
+        # Plot observed data
+        obs_period = obs_data.loc[start_date:end_date]
+        ax.plot(obs_period.index, obs_period.values, label='Observed', color='black', linewidth=2)
+
+        # Plot each simulation dataset
+        colors = plt.cm.rainbow(np.linspace(0, 1, len(sim_data_list)))
+        for sim_data, label, color in zip(sim_data_list, labels, colors):
+            sim_period = sim_data.sel(time=slice(start_date, end_date))
+            ax.plot(sim_period.time, sim_period.values, label=label, color=color, alpha=0.7)
+
+        ax.set_ylabel('Streamflow (cms)')
+        ax.set_title(title)
+        ax.legend()
+        ax.grid(True)
+
+    def generate_in_progress_diagnostics(self) -> None:
+        """Generate and save diagnostics during the optimization process."""
+        self.plot_objective_evolution(in_progress=True)
+        self.plot_parameter_convergence(in_progress=True)
+        #self.plot_in_progress_comparison()
+
+    def plot_in_progress_comparison(self):
+        """Plot comparison between observations, first iteration, and current best iteration."""
+        # Load observation data
+        obs_data = self.load_observation_data()
+
+        # Load first iteration simulation data
+        first_iter_params = self.results_df.iloc[0][self.config.all_params].tolist()
+        first_iter_sim = self.load_simulation_data(first_iter_params)
+
+        # Load current best iteration simulation data
+        best_iter_sim = self.load_best_simulation_data()
+
+        if first_iter_sim is None or best_iter_sim is None:
+            self.logger.warning("Cannot generate in-progress comparison plot. Simulation data is missing.")
+            return
+
+        # Create the comparison plot
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+
+        sim_data_list = [first_iter_sim, best_iter_sim]
+        labels = ['First Iteration', 'Current Best']
+
+        # Calibration period
+        self.plot_comparison(ax1, obs_data, sim_data_list, self.config.calib_period, "Calibration Period", labels)
+
+        # Evaluation period
+        self.plot_comparison(ax2, obs_data, sim_data_list, self.config.eval_period, "Evaluation Period", labels)
+
+        plt.xlabel('Date')
+        fig.suptitle('Comparison: Observations vs First Iteration vs Current Best', fontsize=16)
+        plt.tight_layout()
+        plt.savefig(self.output_folder / 'in_progress_comparison.png')
+        plt.close()
+
 
     def plot_best_simulation_vs_observation(self) -> None:
         """
@@ -237,6 +366,54 @@ class Results:
         plt.savefig(self.output_folder / 'best_simulation_vs_observation.png')
         plt.close()
 
+
+    def save_best_simulation(self, params, sim_data):
+        """
+        Save the current best simulation output.
+
+        Args:
+            params (List[float]): The parameter set that produced this simulation.
+            sim_data (xr.DataArray): The simulation data to save.
+        """
+        best_sim_dir = Path(self.config.root_path) / f"domain_{self.config.domain_name}" / "simulations" / f"{self.config.experiment_id}_best" / "mizuRoute"
+        best_sim_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save parameters
+        param_file = best_sim_dir / 'best_params.txt'
+        with open(param_file, 'w') as f:
+            for param, value in zip(self.config.all_params, params):
+                f.write(f"{param}: {value}\n")
+
+        # Save simulation data
+        sim_file = best_sim_dir / f'{self.config.experiment_id}_best.h.nc'
+        sim_data.to_netcdf(sim_file)
+
+        self.logger.info(f"Saved best simulation to {sim_file}")
+
+    def load_simulation_data(self, params=None):
+        """
+        Load the simulation data for a given parameter set or the best simulation.
+        """
+        if params is None:
+            # Loading the best simulation
+            sim_file = Path(self.config.root_path) / f"domain_{self.config.domain_name}" / "simulations" / f"{self.config.experiment_id}_best" / "mizuRoute" / f"{self.config.experiment_id}_best.h.nc"
+        else:
+            # This should be implemented to load the current simulation data based on the given parameters
+            # For now, we'll just use the same file as the best simulation
+            sim_file = Path(self.config.root_path) / f"domain_{self.config.domain_name}" / "simulations" / f"{self.config.experiment_id}_best" / "mizuRoute" / f"{self.config.experiment_id}_best.h.nc"
+        
+        if not sim_file.exists():
+            self.logger.warning(f"Simulation file not found: {sim_file}")
+            return None
+        
+        try:
+            ds = xr.open_dataset(sim_file)
+            sim_flow = ds.sel(seg=self.config.sim_reach_ID)['IRFroutedRunoff']
+            return sim_flow
+        except Exception as e:
+            self.logger.error(f"Error loading simulation data: {str(e)}")
+            return None
+        
     def load_simulation_data(self, best_params: pd.Series) -> xr.DataArray:
         """
         Load the simulation data for the best parameter set.
@@ -361,25 +538,51 @@ class Results:
         plt.close()
 
     def plot_parameter_convergence(self, in_progress: bool = False) -> None:
+        """Plot the convergence of parameter values over iterations in a grid layout."""
         parameter_columns = self.config.all_params
-        fig, axes = plt.subplots(len(parameter_columns), 1, figsize=(12, 4*len(parameter_columns)), sharex=True)
+        n_params = len(parameter_columns)
         
-        for ax, param in zip(axes, parameter_columns):
-            ax.plot(self.results_df['Iteration'], self.results_df[param], 'b.')
-            ax.set_ylabel(param)
-            ax.grid(True)
+        # Calculate the grid dimensions
+        n_cols = min(4, n_params)  # Maximum of 4 columns
+        n_rows = math.ceil(n_params / n_cols)
+        
+        # Create the figure and axes
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 3*n_rows), squeeze=False)
+        fig.suptitle('Parameter Values Over Iterations', fontsize=16)
+        
+        for i, (param, ax) in enumerate(zip(parameter_columns, axes.flatten())):
+            ax.plot(self.results_df['Iteration'], self.results_df[param], 'b.', alpha=0.5)
+            ax.set_title(param, fontsize=10)
+            ax.tick_params(axis='both', which='major', labelsize=8)
+            ax.grid(True, linestyle=':', alpha=0.6)
             
+            # Add boundary lines if available
             if param in self.config.all_bounds:
                 lower, upper = self.config.all_bounds[param]
                 ax.axhline(y=lower, color='r', linestyle='--', alpha=0.5)
                 ax.axhline(y=upper, color='r', linestyle='--', alpha=0.5)
+            
+            # Set y-axis limits with a small buffer
+            param_min = self.results_df[param].min()
+            param_max = self.results_df[param].max()
+            buffer = (param_max - param_min) * 0.1  # 10% buffer
+            ax.set_ylim(param_min - buffer, param_max + buffer)
+            
+            # Only show x-label for bottom row
+            if i >= n_params - n_cols:
+                ax.set_xlabel('Iteration', fontsize=8)
+            
+            # Use scientific notation for y-axis if values are very small or large
+            ax.ticklabel_format(axis='y', style='sci', scilimits=(-2,2))
         
-        axes[-1].set_xlabel('Iteration')
-        plt.suptitle('Parameter Values Over Iterations')
-        plt.tight_layout()
+        # Remove any unused subplots
+        for j in range(i+1, n_rows*n_cols):
+            fig.delaxes(axes.flatten()[j])
+        
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])  # Adjust layout to accommodate suptitle
         
         suffix = '_in_progress' if in_progress else '_final'
-        plt.savefig(self.output_folder / f'parameter_convergence{suffix}.png')
+        plt.savefig(self.output_folder / f'parameter_convergence{suffix}.png', dpi=300)
         plt.close()
 
     def plot_parallel_coordinates(self) -> None:

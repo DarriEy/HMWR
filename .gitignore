@@ -12,3 +12,4 @@ core.*
 rtd/build
 
 rtd/source/*.md
+0_control_files/

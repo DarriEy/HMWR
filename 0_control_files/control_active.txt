@@ -79,17 +79,26 @@ datatool_cache              | default                                   # If 'de
 datatool_prefix             | default                                   # If 'default', uses [domain]_[dataset]
 datatool_path               | default                                   # If 'default', uses 'root_path/installs/datatool/.
 
+# MAF settings 
+num_land_cover               | 19
+minimume_land_fraction       | 0.05
+num_soil_type                | 12
+unify_soil                   | true
+frac_threshold               | 0.01
+write_mizuroute_domain       | true
+soil_mLayerDepth             | 0.1,0.25,0.5,2.15
+
 # Observation settings
 streamflow_raw_path         | default                                   # If 'default', uses 'root_path/domain_[name]/observations/streamflow/raw_data'.
 streamflow_raw_name         | Discharge.Working@05BB001.20110101_corrected.csv
 streamflow_processed_path   | default                                   # If 'default', uses 'root_path/domain_[name]/observations/preprocessed/raw_data'.
 streamflow_processed_name   | streamflow_obs_processed.csv
-snow_raw_path               | default                                   # If 'default', uses 'root_path/domain_[name]/observations/streamflow/raw_data'.
+snow_raw_path               | default                                   # If 'default', uses 'root_path/domain_[name]/observations/snow/raw_data'.
 snow_raw_name               | CanSWE-CanEEN_1928-2022_v5.csv
-snow_processed_path         | default                                   # If 'default', uses 'root_path/domain_[name]/observations/preprocessed/raw_data'.
+snow_processed_path         | default                                   # If 'default', uses 'root_path/domain_[name]/observations/snow/preprocessed/'.
 snow_processed_name         | BowAtBanff_filtered_snow_observations.csv
-
-
+snow_station_shapefile_name | snow_stations_with_data.shp
+snow_station_shapefile_path | default                                   # If 'default', uses 'root_path/domain_[name]/shapefiles/observations/
 
 # Parameter settings - DEM
 parameter_dem_main_url      | http://hydro.iis.u-tokyo.ac.jp/~yamadai/MERIT_Hydro/distribute/v1.0.1/     # Primary download URL for MERIT Hydro adjusted elevation data. Needs to be appended with filenames.
@@ -173,8 +182,8 @@ settings_mizu_make_outlet   | 71028585                                    # Segm
 
 # Optimization settings
 Optimisation_algorithm 	    | NSGA-II		    	                          # Options are: Differential Evolution: "DE", Particle Swarm: "PSO", Shuffled Complex Evolution: "SCE-UA", Basin-hopping" "Basin-hopping", Dynamically Dimensioned Search "DDS", or NSGA-II or NSGA-III or Borg-MOEA or SMS-EMOA or MOEA/D or MOPSO
-optimization_metric 	    | KGE  					                      # Options: Root mean square error : "RMSE", Nash-Suthcliffe efficiency: "NSE", Kling-Gupta Efficiency: "KGE", KGE projected: "KGEp", Mean absolute error: "MAE"
-moo_optimization_metrics    | KGE,RMSE                                # optimisation metrics to use in multi objective optimisation
+optimization_metric 	    | KGEnp  					                      # Options: Root mean square error : "RMSE", Nash-Suthcliffe efficiency: "NSE", Kling-Gupta Efficiency: "KGE", KGE projected: "KGEp", Mean absolute error: "MAE"
+moo_optimization_metrics    | KGEnp,RMSE                                # optimisation metrics to use in multi objective optimisation
 optimization_results_file   | default				                   	  # If 'default', uses 'root_path/domain_[name]/settings/SUMMA/basinParamInfo.txt'
 calibration_period          | 2011-01-01, 2011-12-31                      # start_date, end_date in format YYYY-MM-DD
 evaluation_period           | 2012-01-01, 2012-12-31                      # start_date, end_date in format YYYY-MM-DD
@@ -189,17 +198,18 @@ mizuRoute_run_command	    | ./2_run_mizuRoute.sh			              # Script to run
 obs_file_path		        | /Users/darrieythorsson/compHydro/data/CWARHM_data/domain_BowAtBanff/observations/streamflow/preprocessed/BowAtBanff_streamflow_processed.csv 
 sim_file_path		        | /Users/darrieythorsson/compHydro/data/CWARHM_data/domain_BowAtBanff/simulations/run3/mizuRoute/run3.h.2010-01-01-00000.nc
 sim_reach_ID		        | 71028585					                  # ID of the river reach in the mizuRoute output to evaluate against observations 
-num_iter		            | 100					                      # Number of iterations to calibrate
-poplsize		            | 20				                              # Population size for differential evolution algorithm
-swrmsize		            | 20					                          # Swarm size for particle swarm optimisation algorithm
-ngsize			            | 20					                          # ngsize for shuffled complex evolution algorithm
+num_iter		            | 500					                      # Number of iterations to calibrate
+poplsize		            | 150				                              # Population size for differential evolution algorithm
+swrmsize		            | 150					                          # Swarm size for particle swarm optimisation algorithm
+ngsize			            | 150					                          # ngsize for shuffled complex evolution algorithm
 dds_r                       | 0.2                                         # DDS perturbation parameter
 sensitivity_output_folder   | default                                     # If 'default', uses 'root_path/sensitivity_analysis'
 params_to_calibrate         | tempCritRain,albedoDecayRate,newSnowDenMin,newSnowDenMultTemp,Fcapil,k_snow,soil_dens_intr,thCond_soil,theta_sat,theta_res,k_soil,k_macropore,vGn_alpha,f_impede,aquiferBaseflowRate
 basin_params_to_calibrate   | basin__aquiferHydCond,routingGammaScale,routingGammaShape,basin__aquiferBaseflowExp,basin__aquiferScaleFactor
 diagnostic_frequency        | 9
 ostrich_path                | /Users/darrieythorsson/compHydro/data/CWARHM_data/installs/Ostrich_v17.12.19/Source/OstrichMPI  # Path to ostrich executable 
-
+ostrich_exe                 | OstrichMPI
+modis_ndsi_threshold        | 5
 
 # Multi objective optimisation settings
 moo_optimisation_algorithm  | SMS-EMOA                                    # NSGA-II or NSGA-III or Borg-MOEA or SMS-EMOA or MOEA/D or MOPSO
@@ -215,7 +225,7 @@ nsga2_n_obj                 | 5                                           # Numb
 elevation_band_size 	    | 300  					                     # Elevation band size in meters
 min_hru_size 		        | 1  					                     # Minimum HRU size in square kilometers
 radiation_class_number      | 3                                          # Number of radiation classes to discretise
-
+stream_order_threshold      | 5
 
 # Postprocessing settings
 visualization_folder        | default                                     # If 'default', uses 'root_path/domain_[name]/visualization'.

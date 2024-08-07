@@ -13,6 +13,10 @@ from utils.calculate_sim_stats import get_KGE, get_KGEp, get_NSE, get_MAE, get_R
 from utils.logging_utils import get_logger # type: ignore
 from utils.config import Config, get_config_path, read_from_control # type: ignore
 from mpi4py import MPI # type: ignore
+import geopandas as gpd # type: ignore
+import rasterio # type: ignore
+from rasterstats import zonal_stats # type: ignore
+from datetime import datetime
 
 def run_summa(summa_path, summa_exe, filemanager_path, log_path, log_name, local_rank):
     """
@@ -579,7 +583,7 @@ class ModelEvaluator:
 
         Args:
             mizuroute_rank_specific_path (Path): Path to the mizuRoute output directory.
-
+            SUMMA_rank_specific_path (Path): Path to the SUMMA output directory.
         Returns:
             Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]: 
                 A tuple containing two dictionaries (calibration metrics, evaluation metrics).
@@ -609,7 +613,22 @@ class ModelEvaluator:
                 self.config.sim_reach_ID, 
                 self.config.obs_file_path
             )
+
+            # Derive SUMMA rank-specific path from mizuRoute path
+            #parent_dir = mizuroute_rank_specific_path.parent
+            #summa_rank_specific_path = parent_dir / "SUMMA"
+            #summa_output_file = str(summa_rank_specific_path) + '/*_day.nc'
+
+            #summa_output = xr.open_mfdataset(summa_output_file)
+            #land_attribute_metrics = self.evaluate_land_attributes(summa_output)
+            #print(land_attribute_metrics)
+
+            # Evaluate geospatial attributes (MODIS NDSI)
+            #geospatial_metrics = self.evaluate_geospatial(summa_output)
+            #print(geospatial_metrics)
+
             return calib_metrics, eval_metrics
+
         except Exception as e:
             self.logger.error(f"Error during model evaluation: {str(e)}", exc_info=True)
             return None, None
@@ -649,7 +668,7 @@ class ModelEvaluator:
                 'KGE': get_KGE(obs, sim, transfo=1),
                 'KGEp': get_KGEp(obs, sim, transfo=1),
                 'NSE': get_NSE(obs, sim, transfo=1),
-                'KGEnp': get_KGEnp(obs, sim, transfo=1),                
+                'KGEnp': get_KGEnp(obs, sim, transfo=1),
                 'MAE': get_MAE(obs, sim, transfo=1)
             }
 
@@ -669,7 +688,7 @@ class ModelEvaluator:
 
     def evaluate_geospatial(self, model_output: xr.Dataset) -> Dict[str, Any]:
         """
-        Perform geospatial evaluation of model results.
+        Perform geospatial evaluation of model results using preprocessed MODIS NDSI data.
 
         Args:
             model_output (xr.Dataset): Model output dataset.
@@ -677,13 +696,52 @@ class ModelEvaluator:
         Returns:
             Dict[str, Any]: Geospatial evaluation metrics.
         """
-        # Placeholder for geospatial evaluation
-        # Implementation to be added later
-        return {}
+        try:
+            # Load preprocessed MODIS data
+            preprocessed_file = self.config.snow_processed_path / f"{self.config.domain_name}_preprocessed_modis_data.csv"
+            modis_df = pd.read_csv(preprocessed_file, parse_dates=['date'])
+            print(f"Loaded preprocessed MODIS data. Shape: {modis_df.shape}")
+
+            # Get simulated SCA from model output
+            sim_sca = model_output.scalarGroundSnowFraction.to_dataframe().reset_index()
+            sim_sca = sim_sca.rename(columns={'scalarGroundSnowFraction': 'sim_sca'})
+
+            # Merge observed and simulated data
+            merged_df = pd.merge(modis_df, sim_sca, on=['date', 'hru_id'], how='inner')
+            print(f"Merged data shape: {merged_df.shape}")
+
+            # Calculate metrics for calibration and evaluation periods
+            calib_metrics = self._calculate_geospatial_metrics(merged_df, self.config.calib_period)
+            eval_metrics = self._calculate_geospatial_metrics(merged_df, self.config.eval_period)
+
+            print(f"Calibration metrics: {calib_metrics}")
+            print(f"Evaluation metrics: {eval_metrics}")
+
+            return {
+                'calib_metrics': calib_metrics,
+                'eval_metrics': eval_metrics
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error in evaluate_geospatial: {str(e)}", exc_info=True)
+            return {}
+
+    def _calculate_geospatial_metrics(self, df: pd.DataFrame, period: Tuple[datetime, datetime]) -> Dict[str, float]:
+        """Calculate performance metrics for geospatial data within a specified period."""
+        period_df = df[(df['date'] >= period[0]) & (df['date'] <= period[1])]
+        
+        return {
+            'RMSE': get_RMSE(period_df['obs_sca'].values, period_df['sim_sca'].values, transfo=1),
+            'KGE': get_KGE(period_df['obs_sca'].values, period_df['sim_sca'].values, transfo=1),
+            'KGEp': get_KGEp(period_df['obs_sca'].values, period_df['sim_sca'].values, transfo=1),
+            'NSE': get_NSE(period_df['obs_sca'].values, period_df['sim_sca'].values, transfo=1),
+            'MAE': get_MAE(period_df['obs_sca'].values, period_df['sim_sca'].values, transfo=1),
+            'KGEnp': get_KGEnp(period_df['obs_sca'].values, period_df['sim_sca'].values, transfo=1)
+        }
 
     def evaluate_land_attributes(self, model_output: xr.Dataset) -> Dict[str, Any]:
         """
-        Evaluate model performance with respect to land attributes.
+        Evaluate model performance with respect to land attributes (SWE).
 
         Args:
             model_output (xr.Dataset): Model output dataset.
@@ -691,6 +749,72 @@ class ModelEvaluator:
         Returns:
             Dict[str, Any]: Land attribute evaluation metrics.
         """
-        # Placeholder for land attribute evaluation
-        # Implementation to be added later
-        return {}
+        try:
+            # Read the snow observation data
+            snow_obs_path = self.config.snow_processed_path / self.config.snow_processed_name
+            snow_obs = pd.read_csv(snow_obs_path, parse_dates=['datetime'])
+
+            # Read the snow station shapefile
+            station_shp_path = self.config.snow_station_shapefile_path / self.config.snow_station_shapefile_name
+            station_gdf = gpd.read_file(station_shp_path)
+
+            # Merge observation data with station information
+            merged_data = pd.merge(snow_obs, station_gdf, on='station_id')
+
+            # Group by HRU and calculate average observed SWE
+            hru_avg_swe = merged_data.groupby(['HRU_ID', 'datetime'])['snw'].mean().reset_index()
+
+            # Initialize dictionaries to store metrics
+            calib_metrics = {}
+            eval_metrics = {}
+
+            # Iterate through HRUs with observations
+            for hru_id in hru_avg_swe['HRU_ID'].unique():
+                hru_obs = hru_avg_swe[hru_avg_swe['HRU_ID'] == hru_id].set_index('datetime')
+                hru_sim = model_output['scalarSWE'].sel(hru=hru_id).to_dataframe()
+
+                # Align observation and simulation data
+                aligned_data = pd.merge(hru_obs, hru_sim, left_index=True, right_index=True, how='inner')
+
+                # Calculate metrics for calibration period
+                calib_data = aligned_data[(aligned_data.index >= self.config.calib_period[0]) & 
+                                          (aligned_data.index <= self.config.calib_period[1])]
+                calib_metrics[hru_id] = self._calculate_metrics(calib_data['snw'].values, calib_data['scalarSWE'].values)
+
+                # Calculate metrics for evaluation period
+                eval_data = aligned_data[(aligned_data.index >= self.config.eval_period[0]) & 
+                                         (aligned_data.index <= self.config.eval_period[1])]
+                eval_metrics[hru_id] = self._calculate_metrics(eval_data['snw'].values, eval_data['scalarSWE'].values)
+
+            # Calculate average metrics across all HRUs
+            avg_calib_metrics = self._average_metrics(calib_metrics)
+            avg_eval_metrics = self._average_metrics(eval_metrics)
+
+            return {
+                'calib_metrics': avg_calib_metrics,
+                'eval_metrics': avg_eval_metrics,
+                #'hru_calib_metrics': calib_metrics,
+                #'hru_eval_metrics': eval_metrics
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error in evaluate_land_attributes: {str(e)}", exc_info=True)
+            return {}
+
+    def _calculate_metrics(self, obs: np.ndarray, sim: np.ndarray) -> Dict[str, float]:
+        """Calculate performance metrics for observed and simulated data."""
+        return {
+            'RMSE': get_RMSE(obs, sim, transfo=1),
+            'KGE': get_KGE(obs, sim, transfo=1),
+            'KGEp': get_KGEp(obs, sim, transfo=1),
+            'NSE': get_NSE(obs, sim, transfo=1),
+            'MAE': get_MAE(obs, sim, transfo=1),
+            'KGEnp': get_KGEnp(obs, sim, transfo=1)
+        }
+
+    def _average_metrics(self, metrics: Dict[int, Dict[str, float]]) -> Dict[str, float]:
+        """Calculate average metrics across all HRUs."""
+        avg_metrics = {}
+        for metric in ['RMSE', 'KGE', 'KGEp', 'NSE', 'MAE', 'KGEnp']:
+            avg_metrics[metric] = np.mean([hru_metrics[metric] for hru_metrics in metrics.values()])
+        return avg_metrics
