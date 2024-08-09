@@ -3,7 +3,7 @@ from pathlib import Path
 import subprocess
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from utils.control_file_utils import read_from_control, make_default_path
+from utils.control_file_utils import read_from_control, make_default_path # type: ignore
 
 # Easy access to control file folder
 controlFolder = Path('../../0_control_files')

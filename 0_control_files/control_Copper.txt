@@ -215,6 +215,8 @@ sensitivity_output_folder   | default                                     # If '
 params_to_calibrate         | tempCritRain,albedoDecayRate,newSnowDenMin,newSnowDenMultTemp,Fcapil,k_snow,soil_dens_intr,thCond_soil,theta_sat,theta_res,k_soil,k_macropore,vGn_alpha,f_impede,aquiferBaseflowRate
 basin_params_to_calibrate   | basin__aquiferHydCond,routingGammaScale,routingGammaShape,basin__aquiferBaseflowExp,basin__aquiferScaleFactor
 diagnostic_frequency        | 9                                          # frequency of diagnostic output
+modis_ndsi_threshold        | 10
+
 
 # Multi objective optimisation settings
 moo_optimisation_algorithm  | SMS-EMOA                                    # NSGA-II or NSGA-III or Borg-MOEA or SMS-EMOA or MOEA/D or MOPSO
@@ -226,7 +228,7 @@ nsga2_n_obj                 | 2                                           # Numb
 
 
 # Discretisation settings
-domain_subsetting	        | Merit					# Subset your domain based on existing delineations. Options: Merit, TDX, NWX, delineate
+domain_subsetting	        | delineate					# Subset your domain based on existing delineations. Options: Merit, TDX, NWX, delineate
 domain_discretisation       | radiation_class             # Discretise your domain based on geospatial attributes, options: elevation, land_class, soil_class, radiation_class, none
 stream_order_threshold      | 5                     # Strahler stream order threshold for discretising subbasins
 elevation_band_size 	    | 250  					# Elevation band size in meters

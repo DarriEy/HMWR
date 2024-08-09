@@ -10,7 +10,7 @@ from rasterio.features import shapes # type: ignore
 import logging
 import geopandas as gpd # type: ignore
 import networkx as nx # type: ignore
-from shapely.geometry import Point, Polygon, MultiPolygon, LineString, shape, mapping # type: ignore
+from shapely.geometry import Point, Polygon, MultiPolygon, LineString, shape, mapping #type: ignore
 import math
 from shapely.ops import unary_union, polygonize # type: ignore
 from shapely.validation import make_valid # type: ignore
@@ -23,7 +23,10 @@ import os
 import whitebox # type: ignore
 import inspect
 from rasterio import features # type: ignore
-from scipy.ndimage import uniform_filter # type: ignore
+from scipy.ndimage import uniform_filter, binary_fill_holes # type: ignore
+from rasterio.io import MemoryFile # type: ignore
+from scipy.spatial.distance import cdist # type: ignore
+from scipy.ndimage import distance_transform_edt # type: ignore
 
 def create_pour_point_shapefile(config, logger):
     logger.info("Creating pour point shapefile")
@@ -58,49 +61,23 @@ def create_pour_point_shapefile(config, logger):
     
     return None
 
-def run_whitebox_tool(tool_name, arguments):
-    wbt = whitebox.WhiteboxTools()
-    
+def run_wbt_tool(tool_name, logger, **kwargs):
+    logger.info(f"Running {tool_name} with args: {kwargs}")
     try:
+        wbt = whitebox.WhiteboxTools()
         tool_function = getattr(wbt, tool_name)
-        
-        # Get the function signature
-        sig = inspect.signature(tool_function)
-        
-        # Prepare arguments
-        args = []
-        kwargs = {}
-        for arg in arguments:
-            if '=' in arg:
-                key, value = arg.split('=')
-                key = key.lstrip('-')  # Remove leading dashes
-                if key in sig.parameters:
-                    kwargs[key] = value
-                else:
-                    print(f"Warning: Argument '{key}' not found in function signature for {tool_name}")
-            else:
-                args.append(arg)
-        
-        # Print function signature and provided arguments for debugging
-        print(f"Function signature for {tool_name}: {sig}")
-        print(f"Provided args: {args}")
-        print(f"Provided kwargs: {kwargs}")
-        
-        # Call the function with the prepared arguments
-        result = tool_function(*args, **kwargs)
-        
-        # Print the result for debugging
-        print(f"Result from {tool_name}: {result}")
-        
-        # Check if the result is an error code
-        if isinstance(result, int) and result != 0:
-            raise RuntimeError(f"WhiteboxTools {tool_name} failed with return code {result}")
-        
+        result = tool_function(**kwargs)
+        logger.info(f"{tool_name} result: {result}")
+        output_file = kwargs.get('output')
+        if output_file and not os.path.exists(output_file):
+            logger.error(f"Expected output file {output_file} was not created by {tool_name}")
         return result
-    except AttributeError as e:
-        raise RuntimeError(f"WhiteboxTools doesn't have a tool named {tool_name}: {str(e)}")
-    except Exception as e:
-        raise RuntimeError(f"WhiteboxTools {tool_name} failed: {str(e)}")
+    except AttributeError:
+        logger.error(f"Tool {tool_name} not found in WhiteboxTools")
+        raise
+    except TypeError as e:
+        logger.error(f"TypeError in {tool_name}: {str(e)}")
+        raise
 
 def visualize_raster(raster_path, title, logger):
     try:
@@ -123,130 +100,229 @@ def visualize_raster(raster_path, title, logger):
     except Exception as e:
         logger.error(f"Failed to visualize {title}: {str(e)}")
 
-def validate_dem(dem_path, logger):
-    try:
-        with rasterio.open(dem_path) as src:
-            data = src.read(1)
-            if np.all(data == src.nodata):
-                raise ValueError("DEM contains only no-data values")
-            if np.all(data == 0):
-                raise ValueError("DEM contains only zero values")
-            logger.info(f"DEM statistics - Min: {np.min(data)}, Max: {np.max(data)}, Mean: {np.mean(data)}")
-    except Exception as e:
-        logger.error(f"Failed to validate DEM: {str(e)}")
-        raise
-
 def delineate_grus(config, logger):
     logger.info("Delineating GRUs, sub-basins, and river network")
     
-    try:
-        dem_raster = Path(config.root_path) / f"domain_{config.domain_name}" / "parameters" / "dem" / "5_elevation" / config.parameter_dem_tif_name
-        pour_point_shapefile = config.pour_point_shapefile_path
-        output_gru_shapefile = Path(config.root_path) / f"domain_{config.domain_name}" / "shapefiles" / "river_basins" / f"{config.domain_name}_delineated_GRUs.shp"
-        output_subbasin_shapefile = Path(config.root_path) / f"domain_{config.domain_name}" / "shapefiles" / "river_basins" / f"{config.domain_name}_delineated_subbasins.shp"
-        output_river_shapefile = Path(config.root_path) / f"domain_{config.domain_name}" / "shapefiles" / "river_network" / f"{config.domain_name}_river_network.shp"
-        
-        # Set the working directory
-        work_dir = Path(config.root_path) / f"domain_{config.domain_name}" / "temp"
-        work_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Set Whitebox working directory
-        wbt = whitebox.WhiteboxTools()
-        wbt.set_working_dir(str(work_dir))
-        
-        # Define output files
-        filled_dem = work_dir / "filled_dem.tif"
-        breached_dem = work_dir / "breached_dem.tif"
-        flow_dir = work_dir / "flow_dir.tif"
-        flow_acc = work_dir / "flow_acc.tif"
-        streams = work_dir / "streams.tif"
-        stream_order = work_dir / "stream_order.tif"
-        subbasins = work_dir / "subbasins.tif"
-        snap_pour_points = work_dir / "snap_pour_points.shp"
-        
-        validate_dem(dem_raster, logger)
+    dem_raster = Path(config.root_path) / f"domain_{config.domain_name}" / "parameters" / "dem" / "5_elevation" / config.parameter_dem_tif_name
+    pour_point_shapefile = config.pour_point_shapefile_path
+    output_gru_shapefile = Path(config.root_path) / f"domain_{config.domain_name}" / "shapefiles" / "river_basins" / f"{config.domain_name}_delineated_GRUs.shp"
+    output_subbasin_shapefile = Path(config.root_path) / f"domain_{config.domain_name}" / "shapefiles" / "river_basins" / f"{config.domain_name}_delineated_subbasins.shp"
+    output_river_shapefile = Path(config.root_path) / f"domain_{config.domain_name}" / "shapefiles" / "river_network" / f"{config.domain_name}_river_network.shp"
+    
+    work_dir = Path(config.root_path) / f"domain_{config.domain_name}" / "temp"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    
+    wbt = whitebox.WhiteboxTools()
+    wbt.set_working_dir(str(work_dir))
+    
+    logger.info(f"Processing DEM: {dem_raster}")
+    
+    processed_dem = work_dir / 'processed_dem.tif'
+    run_wbt_tool("gaussian_filter", logger,
+                    i=str(dem_raster), 
+                    output=str(processed_dem), 
+                    sigma=1)
+    visualize_raster(processed_dem, "Smoothed DEM", logger)
+    
+    filled_dem = work_dir / 'filled_dem.tif'
+    run_wbt_tool("fill_depressions", logger,
+                    dem=str(processed_dem), 
+                    output=str(filled_dem))
+    visualize_raster(filled_dem, "Filled DEM", logger)
+    
+    breached_dem = work_dir / 'breached_dem.tif'
+    run_wbt_tool("breach_depressions", logger, 
+                    dem=str(filled_dem), 
+                    output=str(breached_dem),
+                    max_depth=100,
+                    max_length=10000)
+    visualize_raster(breached_dem, "Breached DEM", logger)
+    
+    # Switch to pysheds for flow direction and accumulation
+    logger.info("Using pysheds for flow direction and accumulation")
+    grid = Grid.from_raster(str(breached_dem))
+    dem = grid.read_raster(str(breached_dem))
 
-        logger.info("Filling depressions...")
-        run_whitebox_tool("fill_depressions", [f"{dem_raster}", f"output={filled_dem}", "fix_flats=True"])
-        
-        # Visualize filled DEM
-        visualize_raster(filled_dem, "Filled DEM", logger)
+    # Flow Direction
+    flow_dir = grid.flowdir(dem)
+    flow_dir_file = work_dir / 'flow_dir.tif'
+    grid.to_raster(flow_dir, flow_dir_file)
+    visualize_raster(flow_dir_file, "Flow Direction (pysheds)", logger)
+    
+    # Flow Accumulation
+    flow_acc = grid.accumulation(flow_dir)
+    flow_acc_file = work_dir / 'flow_acc.tif'
+    grid.to_raster(flow_acc, flow_acc_file)
+    visualize_raster(flow_acc_file, "Flow Accumulation (pysheds)", logger)
+    flow_acc_threshold = 100000 
 
-        logger.info("Breaching depressions...")
-        run_whitebox_tool("breach_depressions", [f"{filled_dem}", f"output={breached_dem}", "max_depth=100", "max_length=100"])
-        
-        # Visualize breached DEM
-        visualize_raster(breached_dem, "Breached DEM", logger)
+    # Save flow direction and accumulation as rasters for later use
+    flow_dir_file = work_dir / 'flow_dir.tif'
+    flow_acc_file = work_dir / 'flow_acc.tif'
+    grid.to_raster(flow_dir, flow_dir_file)
+    grid.to_raster(flow_acc, flow_acc_file)
+    
+    # Delineate the whole domain basin using pysheds
+    pour_points = gpd.read_file(pour_point_shapefile)
+    if pour_points.crs != grid.crs:
+        pour_points = pour_points.to_crs(grid.crs)
+    
+    original_x, original_y = pour_points.geometry.iloc[0].x, pour_points.geometry.iloc[0].y
 
-        logger.info("Calculating flow direction...")
-        run_whitebox_tool("d8_pointer", [f"{breached_dem}", f"output={flow_dir}"])
-        
-        # Visualize flow direction
-        visualize_raster(flow_dir, "Flow Direction", logger)
+    # Find nearest point on main stem
+    x, y = find_main_stem(grid, flow_acc, (original_x, original_y), stream_threshold=100000, max_distance= 100)
+    logger.info(f"Moved pour point from ({original_x}, {original_y}) to ({x}, {y})")
 
-        logger.info("Calculating flow accumulation...")
-        run_whitebox_tool("d8_flow_accumulation", [f"{flow_dir}", f"output={flow_acc}", "out_type=cells"])
-        
-        # Visualize flow accumulation
-        visualize_raster(flow_acc, "Flow Accumulation", logger)
+    # Delineate catchment
+    catch = grid.catchment(x, y, flow_dir, xytype='coordinate')
 
-        # Add a step to check flow accumulation statistics
-        logger.info("Checking flow accumulation statistics...")
-        flow_acc_stats = run_whitebox_tool("raster_summary_stats", [f"{flow_acc}"])
-        logger.info(f"Flow accumulation statistics: {flow_acc_stats}")
-        
-        # If flow_acc_stats is 0 or very low, try an alternative method
-        if isinstance(flow_acc_stats, int) and flow_acc_stats == 0:
-            logger.warning("Flow accumulation failed, trying an alternative method...")
-            run_whitebox_tool("fill_depressions", [f"{dem_raster}", f"output={filled_dem}", "fix_flats=True", "flat_increment=0.01"])
-            run_whitebox_tool("d8_pointer", [f"{filled_dem}", f"output={flow_dir}"])
-            run_whitebox_tool("d8_flow_accumulation", [f"{flow_dir}", f"output={flow_acc}", "out_type=cells"])
-            flow_acc_stats = run_whitebox_tool("raster_summary_stats", [f"{flow_acc}"])
-            logger.info(f"New flow accumulation statistics: {flow_acc_stats}")
-            
-            # Visualize new flow accumulation
-            visualize_raster(flow_acc, "New Flow Accumulation", logger)
+    # Convert catchment to polygon
+    catch_filled = binary_fill_holes(catch)
+    catch_poly = _raster_to_polygon(catch_filled, grid.affine)
+    
+    # Create and save GeoDataFrame
+    gru_gdf = gpd.GeoDataFrame({'geometry': [catch_poly]}, crs=grid.crs)
+    gru_gdf.to_file(output_gru_shapefile)
+    
+    # 2. Extract and vectorize stream network
+    flow_acc_path = str(flow_acc_file)
+    flow_dir_path = str(flow_dir_file)
+    river_network_path = extract_river_network(flow_acc_path, flow_dir_path, 10000, str(output_river_shapefile), logger)
+    
+    # 3. Order stream network and delineate sub-basins
+    #subbasins = delineate_subbasins(grid, flow_dir, river_network)
+    #subbasins.to_file(output_subbasin_shapefile)
+    
+    logger.info(f"GRU Shapefile created: {output_gru_shapefile}")
+    logger.info(f"River network Shapefile created: {output_river_shapefile}")
+    logger.info(f"Sub-basin Shapefile created: {output_subbasin_shapefile}")
+    
+    return output_gru_shapefile, output_subbasin_shapefile, output_river_shapefile
 
-        # If we still don't have valid statistics, raise an error
-        if isinstance(flow_acc_stats, int) and flow_acc_stats == 0:
-            raise RuntimeError(f"Failed to obtain valid flow accumulation statistics: {flow_acc_stats}")
+def delineate_subbasins(grid, flow_dir, river_network):
+    # Use river network junctions as pour points for subbasins
+    junctions = grid.find_confluence(flow_dir)
+    labels = grid.subbasin(flow_dir, junctions)
+    
+    # Convert to vector
+    subbasins = grid.polygon_mask(labels)
+    gdf = gpd.GeoDataFrame(geometry=[Polygon(sb) for sb in subbasins], crs=grid.crs)
+    
+    return gdf
 
-        logger.info("Extracting streams...")
-        run_whitebox_tool("extract_streams", [f"{flow_acc}", f"output={streams}", "threshold=1000"])
-        
-        logger.info("Calculating stream order...")
-        run_whitebox_tool("strahler_stream_order", [f"{streams}", f"{flow_dir}", f"output={stream_order}"])
-        
-        logger.info("Delineating sub-basins...")
-        run_whitebox_tool("subbasins", [f"{flow_dir}", f"{streams}", f"output={subbasins}"])
-        
-        logger.info("Converting sub-basins to vector...")
-        run_whitebox_tool("raster_to_vector_polygons", [f"{subbasins}", f"output={output_subbasin_shapefile}"])
-        
-        logger.info("Extracting vector stream network...")
-        run_whitebox_tool("raster_streams_to_vector", [f"{streams}", f"{flow_dir}", f"output={output_river_shapefile}"])
-        
-        logger.info("Snapping pour points...")
-        if os.path.exists(pour_point_shapefile) and os.path.getsize(pour_point_shapefile) > 0:
-            if os.path.exists(streams) and os.path.getsize(streams) > 0:
-                run_whitebox_tool("jenson_snap_pour_points", [f"{pour_point_shapefile}", f"{streams}", f"output={snap_pour_points}", "snap_dist=1000"])
-            else:
-                logger.error(f"Streams file is missing or empty: {streams}")
-        else:
-            logger.error(f"Pour points file is missing or empty: {pour_point_shapefile}")
-        
-        logger.info("Delineating main watershed...")
-        run_whitebox_tool("watershed", [f"{flow_dir}", f"{snap_pour_points}", f"output={output_gru_shapefile}"])
-        
-        logger.info(f"Delineated GRU shapefile saved to: {output_gru_shapefile}")
-        logger.info(f"Delineated sub-basin shapefile saved to: {output_subbasin_shapefile}")
-        logger.info(f"River network shapefile saved to: {output_river_shapefile}")
-        
-        return output_gru_shapefile, output_subbasin_shapefile, output_river_shapefile
+def _raster_to_polygon(raster, affine):
+    polygons = []
+    for geom_dict, value in features.shapes(raster.astype(np.uint8), transform=affine):
+        if value == 1:
+            polygons.append(shape(geom_dict))
+    
+    if len(polygons) == 1:
+        return polygons[0]
+    elif len(polygons) > 1:
+        return MultiPolygon(polygons)
+    else:
+        raise ValueError("No valid polygons found in the raster")
 
-    except Exception as e:
-        logger.error(f"An error occurred during GRU delineation: {str(e)}", exc_info=True)
-        return None, None, None
+def find_main_stem(grid, flow_acc, pour_point, stream_threshold, max_distance=500):
+    """
+    Find the nearest high flow accumulation cell (stream) to the pour point.
+    
+    :param grid: pysheds Grid object
+    :param flow_acc: Flow accumulation grid
+    :param pour_point: (x, y) coordinates of the original pour point
+    :param stream_threshold: Threshold for identifying streams
+    :param max_distance: Maximum distance (in meters) to search for the stream
+    :return: (x, y) coordinates of the nearest stream cell
+    """
+    # Convert pour point to grid indices
+    x, y = pour_point
+    col, row = ~grid.affine * (x, y)
+    pour_point_idx = np.array([[row, col]])
+
+    # Identify stream cells
+    stream_mask = flow_acc > stream_threshold
+    stream_indices = np.column_stack(np.where(stream_mask))
+
+    if len(stream_indices) == 0:
+        return x, y  # Return original pour point if no streams found
+
+    # Calculate distances
+    distances = cdist(pour_point_idx, stream_indices)
+    nearest_idx = np.argmin(distances)
+
+    # Calculate cell size from affine transform
+    cellsize = abs(grid.affine[0])  # Assuming square cells
+
+    # Check if within max_distance
+    if distances[0, nearest_idx] * cellsize > max_distance:
+        return x, y  # Return original pour point if nearest stream is too far
+
+    # Convert nearest stream cell indices back to coordinates
+    nearest_row, nearest_col = stream_indices[nearest_idx]
+    nearest_x, nearest_y = grid.affine * (nearest_col, nearest_row)
+
+    return nearest_x, nearest_y
+
+def extract_river_network(flow_acc_path, flow_dir_path, threshold, output_path, logger):
+    """
+    Extract river network using pysheds from flow accumulation and flow direction rasters.
+    
+    :param flow_acc_path: Path to the flow accumulation raster
+    :param flow_dir_path: Path to the flow direction raster
+    :param threshold: Threshold for stream initiation
+    :param output_path: Path to save the output shapefile
+    :param logger: Logger object for outputting diagnostic information
+    :return: Path to the output shapefile
+    """
+    # Initialize pysheds Grid object
+    grid = Grid.from_raster(flow_acc_path)
+    
+    # Read flow accumulation and flow direction
+    with rasterio.open(flow_acc_path) as src:
+        flow_acc = src.read(1)
+        flow_acc_nodata = src.nodata
+    
+    with rasterio.open(flow_dir_path) as src:
+        flow_dir = src.read(1)
+        flow_dir_nodata = src.nodata
+
+    # Replace nodata values with a valid value (e.g., -1)
+    flow_acc[flow_acc == flow_acc_nodata] = -1
+    flow_dir[flow_dir == flow_dir_nodata] = -1
+
+    # Log flow accumulation statistics
+    logger.info(f"Flow accumulation stats: min={flow_acc.min()}, max={flow_acc.max()}, mean={flow_acc.mean()}")
+
+    # Extract streams
+    streams = grid.extract_river_network(flow_acc, threshold, flow_dir)
+    
+    if streams.sum() == 0:
+        logger.error("No streams extracted. Try lowering the threshold.")
+        return None
+
+    logger.info(f"Number of stream cells: {streams.sum()}")
+
+    # Convert streams to a vector format
+    xs, ys = grid.xy(streams)
+    
+    # Create line geometries
+    lines = []
+    for i in range(len(xs) - 1):
+        line = LineString([(xs[i], ys[i]), (xs[i+1], ys[i+1])])
+        lines.append(line)
+
+    # Create GeoDataFrame
+    gdf = gpd.GeoDataFrame({'geometry': lines}, crs=grid.crs)
+
+    # Dissolve to create continuous lines
+    gdf_dissolved = gdf.dissolve()
+
+    # Save to shapefile
+    gdf_dissolved.to_file(output_path)
+
+    logger.info(f"River network saved to: {output_path}")
+
+    return output_path
 
 def subset_merit_hydrofabrics(config, logger):
     logger.info("Subsetting MERIT Hydrofabrics")
