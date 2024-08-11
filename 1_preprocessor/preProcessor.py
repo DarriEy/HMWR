@@ -274,8 +274,8 @@ class preProcessor:
         """Write SUMMA input files."""
         self.logger.info("Writing SUMMA input files")
 
-        output_path = Path(self.config.root_path) / f"domain_{self.config.domain_name}" / "settings/summa_setup/"
-        output_path.mkdir(parents=True, exist_ok=True)
+        output_path = f'{self.config.root_path}/domain_{self.config.domain_name}/settings/summa_setup/'
+        Path(output_path).mkdir(parents=True, exist_ok=True)
 
         catchment_path = f'{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/catchment/{self.config.catchment_shp_name}'
         river_network_path = f'{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/river_network/{self.config.river_network_shp_name}'
