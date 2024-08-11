@@ -264,9 +264,7 @@ class preConfig:
     num_land_cover: int 
     minimume_land_fraction: float
     num_soil_type: int                
-    unify_soil: bool                   
-    frac_threshold: float               
-    write_mizuroute_domain: bool       
+    unify_soil: bool                               
     soil_mLayerDepth: str             
     snow_processed_path: Path
     snow_processed_name: str
@@ -280,6 +278,11 @@ class preConfig:
     datatool_dataset_root: str
     gistool_dataset_root: str
     river_basin_shp_rm_hruid: str
+    river_network_shp_name: str
+    frac_threshold: float
+    write_mizuroute_domain: str
+    hru_discr:str
+ 
 
     @classmethod
     def from_control_file(cls, control_file: Path):
@@ -321,8 +324,6 @@ class preConfig:
         minimume_land_fraction = float(read_from_control(control_file, 'minimume_land_fraction'))
         num_soil_type = int(read_from_control(control_file, 'num_soil_type'))
         unify_soil = bool(read_from_control(control_file, 'unify_soil'))
-        frac_threshold = float(read_from_control(control_file, 'frac_threshold'))
-        write_mizuroute_domain = bool(read_from_control(control_file, 'write_mizuroute_domain'))
         soil_mLayerDepth = read_from_control(control_file, 'soil_mLayerDepth')
         snow_processed_path = read_from_control(control_file, 'snow_processed_path')
         snow_processed_name = read_from_control(control_file, 'snow_processed_name')
@@ -336,6 +337,11 @@ class preConfig:
         datatool_dataset_root = read_from_control(control_file, 'datatool_dataset_root')
         gistool_dataset_root = read_from_control(control_file, 'gistool_dataset_root')
         river_basin_shp_rm_hruid = read_from_control(control_file, 'river_basin_shp_rm_hruid')
+        river_network_shp_name = read_from_control(control_file, 'river_network_shp_name')
+        frac_threshold = float(read_from_control(control_file, 'frac_threshold'))
+        write_mizuroute_domain = read_from_control(control_file, 'write_mizuroute_domain')
+        hru_discr = read_from_control(control_file, 'hru_discr')
+
 
         return cls(
             root_path=root_path,
@@ -370,7 +376,6 @@ class preConfig:
             num_soil_type=num_soil_type,
             unify_soil=unify_soil,
             frac_threshold=frac_threshold,
-            write_mizuroute_domain=write_mizuroute_domain,
             soil_mLayerDepth=soil_mLayerDepth,
             snow_processed_path=snow_processed_path,
             snow_processed_name=snow_processed_name,
@@ -383,7 +388,10 @@ class preConfig:
             gistool_account=gistool_account,
             datatool_dataset_root=datatool_dataset_root,
             gistool_dataset_root=gistool_dataset_root,
-            river_basin_shp_rm_hruid=river_basin_shp_rm_hruid
+            river_basin_shp_rm_hruid=river_basin_shp_rm_hruid,
+            river_network_shp_name=river_network_shp_name,
+            write_mizuroute_domain=write_mizuroute_domain,
+            hru_discr=hru_discr
 
         )
    

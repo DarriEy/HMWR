@@ -6,9 +6,9 @@
 
 # modules
 import os
-import numpy as np
-import xarray as xr
-import netCDF4 as nc4
+import numpy as np # type: ignore
+import xarray as xr # type: ignore
+import netCDF4 as nc4 # type: ignore
 from pathlib import Path
 from shutil import copyfile
 from datetime import datetime

@@ -1,16 +1,16 @@
 # summaflow: a collection of functions to create summa input files
 # load the needed packages
 # packages are loaded
-import xarray as xr
-import pint_xarray
-import cdo
-import pint
+import xarray as xr # type: ignore
+import pint_xarray # type: ignore
+import cdo # type: ignore
+import pint # type: ignore
 import glob
-import netCDF4 as nc4
+import netCDF4 as nc4 # type: ignore
 import os
-import pandas as pd
-import numpy as np
-import geopandas   as      gpd
+import pandas as pd # type: ignore
+import numpy as np # type: ignore
+import geopandas as gpd # type: ignore
 
 
 ############################
@@ -37,13 +37,14 @@ def sort_geofabric(geofabric):
 # write summa forcing from MESH forcing
 def write_summa_forcing(path_to_save, easymore_output, attr):
     # Replace with your file path pattern
-    easymore_nc_files = sorted(glob.glob(easymore_output+'/*.nc'))
+    easymore_nc_files = sorted(glob.glob(str(easymore_output)+'/*.nc'))
     # split the files in batches as cdo cannot mergetime long list of file names
     batch_size = 15
     # avoid splitting files if their number is too small
     if(len(easymore_nc_files) < batch_size):
         batch_size = len(easymore_nc_files)
     files_split = np.array_split(easymore_nc_files,batch_size)
+
     cdo_obj = cdo.Cdo()  # CDO object
     intermediate_files = []
 
@@ -113,13 +114,13 @@ def write_summa_forcing(path_to_save, easymore_output, attr):
     # set values based on the actual hruId
     forcing.coords['hru'] = attr['hruId'].values
     # save to file
-    forcing.to_netcdf(path_to_save+'summa_forcing.nc')
+    forcing.to_netcdf(str(path_to_save)+'summa_forcing.nc')
     # close the netcdf file
     forcing.close()
     
     # replace T in the time unit with space
 
-    ncid = nc4.Dataset(path_to_save + 'summa_forcing.nc', 'r+')
+    ncid = nc4.Dataset(str(path_to_save) + 'summa_forcing.nc', 'r+')
     
     # Access the 'units' attribute and replace 'T' with a space
     units_attribute = ncid['time'].units
@@ -132,11 +133,15 @@ def write_summa_forcing(path_to_save, easymore_output, attr):
     ncid.close()
     # remove RDRS forcing
     os.remove('RDRS_forcing.nc')
-    return(xr.open_dataset(path_to_save + 'summa_forcing.nc'))
+    return(xr.open_dataset(str(path_to_save) + 'summa_forcing.nc'))
+
 ############################
+
+
 def write_summa_attribute(path_to_save, subbasins_shapefile, rivers_shapefile, gistool_output, frac_threshold, hru_discr, write_mizuroute_domain):
     if not os.path.isdir(path_to_save):
         os.makedirs(path_to_save)
+
     # prepare data by merging the spatial fields into one dataframe
     # read merit geofabric
     # read rivers
@@ -146,7 +151,8 @@ def write_summa_attribute(path_to_save, subbasins_shapefile, rivers_shapefile, g
     cat = gpd.read_file(subbasins_shapefile)
 
     # read elevation stats
-    elev_stats = pd.read_csv(os.path.join(gistool_output, 'modified_domain_stats_elv.csv'))
+    elev_output = gistool_output / 'dem/'
+    elev_stats = pd.read_csv(os.path.join(elev_output, 'modified_domain_stats_elv.csv'))
 
     #rename columns except COMID
     elev_stats = elev_stats.rename(columns=lambda x: x + '_elev' if x != 'COMID' else x)
@@ -154,19 +160,21 @@ def write_summa_attribute(path_to_save, subbasins_shapefile, rivers_shapefile, g
     # merge riv, cat, and elev_stat in one dataframe on COMID
     geofabric = riv.merge(cat, on='COMID')
     geofabric = geofabric.merge(elev_stats, on='COMID')
-    geofabric = geofabric.drop(columns=['geometry_x', 'hillslope_x', 'hillslope_y', 'geometry_y'])
+    #geofabric = geofabric.drop(columns=['geometry_x', 'hillslope_x', 'hillslope_y', 'geometry_y'])
 
     # sort geofabric from upstream to downstream
-    geofabric = sort_geofabric(geofabric)
+    #geofabric = sort_geofabric(geofabric)
 
     # read soil and landcover data
-    soil_stats = pd.read_csv(os.path.join(gistool_output, 'modified_domain_stats_soil_classes.csv'))
+    soil_output = gistool_output / 'soilclass'
+    soil_stats = pd.read_csv(os.path.join(soil_output, 'modified_domain_stats_soil_classes.csv'))
     # reorder df to follow the same order as the hru in the forcing file
     soil_stats = soil_stats.set_index('COMID').loc[geofabric['COMID']].reset_index()
     # rename majority column
     soil_stats = soil_stats.rename(columns={'majority': 'soil_majority'})
 
-    landuse_stats = pd.read_csv(os.path.join(gistool_output, 'modified_domain_stats_NA_NALCMS_landcover_2020_30m.csv'))
+    land_output = gistool_output / 'landclass'
+    landuse_stats = pd.read_csv(os.path.join(land_output, 'modified_domain_stats_NA_NALCMS_landcover_2020_30m.csv'))
     # reorder df to follow the same order as the hru in the forcing file
     landuse_stats = landuse_stats.set_index('COMID').loc[geofabric['COMID']].reset_index()
     # rename majority column
@@ -234,6 +242,7 @@ def write_summa_attribute(path_to_save, subbasins_shapefile, rivers_shapefile, g
     hru_info = pd.DataFrame(columns=['hru2gruId', 'hruId'])
     k = 1
     for index, row in soil_landuse_stats.iterrows():
+
         # hru discretization is based on landcover (default)
         if(hru_discr=='landcover'):
             fractions = [col for col in soil_landuse_stats.columns if col.startswith('frac') and row[col] > frac_threshold]
@@ -322,10 +331,11 @@ def write_summa_attribute(path_to_save, subbasins_shapefile, rivers_shapefile, g
                                         attrs={'long_name': 'Latitude of HRU\'s centriod point', 'units': 'decimal degree north'})
 
     # write attribute file
-    if os.path.isfile(path_to_save+'summa_zLocalAttributes.nc'):
-        os.remove(path_to_save+'summa_zLocalAttributes.nc')
+    if os.path.isfile(str(path_to_save)+'summa_zLocalAttributes.nc'):
+        os.remove(str(path_to_save)+'summa_zLocalAttributes.nc')
 
-    attr.to_netcdf(path_to_save+'summa_zLocalAttributes.nc')
+    attr.to_netcdf(str(path_to_save)+'summa_zLocalAttributes.nc')
+
     ########
     # write mizuroute domain file
     if(write_mizuroute_domain):
@@ -350,10 +360,10 @@ def write_summa_attribute(path_to_save, subbasins_shapefile, rivers_shapefile, g
         mizuroute ['NextDownID']      = xr.DataArray(geofabric['NextDownID'].values, dims=('gru'),
                                             attrs={'long_name': 'Next downstream gruId', 'units': '-'})
         # write attribute file
-        if os.path.isfile(path_to_save+'mizuroute_domain.nc'):
-            os.remove(path_to_save+'mizuroute_domain.nc')
+        if os.path.isfile(str(path_to_save)+'mizuroute_domain.nc'):
+            os.remove(str(path_to_save)+'mizuroute_domain.nc')
 
-        mizuroute.to_netcdf(path_to_save+'mizuroute_domain.nc')
+        mizuroute.to_netcdf(str(path_to_save)+'mizuroute_domain.nc')
     # return the attribute file
     return(attr)
 #################################
@@ -371,10 +381,10 @@ def write_summa_paramtrial(attr, path_to_save):
     # Add variables to the dataset
     ds['hruId'] = xr.DataArray(attr['hruId'].values, dims=('hru'), attrs={'units': '-', 'long_name': 'Index of hydrological response unit (HRU)'})
     ds
-    if os.path.isfile(path_to_save+'summa_zParamTrial.nc'):
-        os.remove(path_to_save+'summa_zParamTrial.nc')
+    if os.path.isfile(str(path_to_save)+'summa_zParamTrial.nc'):
+        os.remove(str(path_to_save)+'summa_zParamTrial.nc')
     
-    ds.to_netcdf(path_to_save+'summa_zParamTrial.nc')
+    ds.to_netcdf(str(path_to_save)+'summa_zParamTrial.nc')
     return(ds)
 
 #################################
@@ -383,6 +393,8 @@ def write_summa_initial_conditions(attr, soil_mLayerDepth, path_to_save):
     # Define dimensions
     hru_size = len(attr['hruId'].values)
     scalarv_size = 1
+    
+    soil_mLayerDepth = [float(i) for i in soil_mLayerDepth.split(',')]
     midSoil_size = midToto_size = len(soil_mLayerDepth)
     ifcToto_size = midSoil_size + 1
 
@@ -418,55 +430,54 @@ def write_summa_initial_conditions(attr, soil_mLayerDepth, path_to_save):
     ds['mLayerDepth'] = xr.DataArray(np.transpose([soil_mLayerDepth] * hru_size), dims=('midToto',  'hru'))
     
     
-    if os.path.isfile(path_to_save+'summa_zInitialCond.nc'):
-        os.remove(path_to_save+'summa_zInitialCond.nc')
+    if os.path.isfile(str(path_to_save)+'summa_zInitialCond.nc'):
+        os.remove(str(path_to_save)+'summa_zInitialCond.nc')
     
-    ds.to_netcdf(path_to_save+'summa_zInitialCond.nc')
+    ds.to_netcdf(str(path_to_save)+'summa_zInitialCond.nc')
     
     return(ds)
 
 ##################################
 def write_summa_filemanager(path_to_save, forcing):
 
-
     start_date = pd.to_datetime(forcing['time'][0].values).strftime('%Y-%m-%d %H:%M')
     end_date = pd.to_datetime(forcing['time'][-1].values).strftime('%Y-%m-%d %H:%M')
 
     template_string="""controlVersion       'SUMMA_FILE_MANAGER_V3.0.0' !  fman_ver 
-simStartTime         '{start_date}' ! 
-simEndTime           '{end_date}' ! 
-tmZoneInfo           'localTime' ! 
-settingsPath         './' !  setting_path
-forcingPath          './' !  input_path
-outputPath           './results/' !  output_path
-decisionsFile        './summa_zDecisions.txt' !  decision
-outputControlFile    './Model_Output.txt' !  OUTPUT_CONTROL
-globalHruParamFile   './summa_zLocalParamInfo.txt' !  local_par
-globalGruParamFile   './summa_zBasinParamInfo.txt' !  basin_par
-attributeFile        './summa_zLocalAttributes.nc' !  local_attr
-trialParamFile       './summa_zParamTrial.nc' !  para_trial
-forcingListFile      './summa_zForcingFileList.txt' !  forcing_list
-initConditionFile    './summa_zInitialCond.nc' !  initial_cond
-outFilePrefix        'myTest' !  output_prefix
-vegTableFile         'VEGPARM.TBL' ! 
-soilTableFile        'SOILPARM.TBL' ! 
-generalTableFile     'GENPARM.TBL' ! 
-noahmpTableFile      'MPTABLE.TBL' ! 
-! history written by summaflow
-"""
+    simStartTime         '{start_date}' ! 
+    simEndTime           '{end_date}' ! 
+    tmZoneInfo           'localTime' ! 
+    settingsPath         './' !  setting_path
+    forcingPath          './' !  input_path
+    outputPath           './results/' !  output_path
+    decisionsFile        './summa_zDecisions.txt' !  decision
+    outputControlFile    './Model_Output.txt' !  OUTPUT_CONTROL
+    globalHruParamFile   './summa_zLocalParamInfo.txt' !  local_par
+    globalGruParamFile   './summa_zBasinParamInfo.txt' !  basin_par
+    attributeFile        './summa_zLocalAttributes.nc' !  local_attr
+    trialParamFile       './summa_zParamTrial.nc' !  para_trial
+    forcingListFile      './summa_zForcingFileList.txt' !  forcing_list
+    initConditionFile    './summa_zInitialCond.nc' !  initial_cond
+    outFilePrefix        'myTest' !  output_prefix
+    vegTableFile         'VEGPARM.TBL' ! 
+    soilTableFile        'SOILPARM.TBL' ! 
+    generalTableFile     'GENPARM.TBL' ! 
+    noahmpTableFile      'MPTABLE.TBL' ! 
+    ! history written by summaflow
+    """
 
     # Replace the placeholder with the actual start date using an f-string
     fileManager = template_string.format(start_date=start_date, end_date = end_date)
 
 
     # Optionally, write the formatted string to a file
-    output_file = path_to_save+'summa_fileManager.txt'
+    output_file = str(path_to_save)+'summa_fileManager.txt'
     with open(output_file, 'w') as file:
         file.write(fileManager)
 
 ###############################
 def copy_summa_static_files(path_to_save):
-    os.system("cp -r setting_files/* "+ path_to_save)
+    os.system(f"cp -r /project/6093124/darri/data/CWARHM_data/installs/MAF/03_model_specific_component/03_summa/setting_files/* "+ str(path_to_save))
     # create results firectory
-    if not os.path.isdir(path_to_save+'results/'):
-        os.makedirs(path_to_save+'results/')
+    if not os.path.isdir(str(path_to_save)+'results/'):
+        os.makedirs(str(path_to_save)+'results/')

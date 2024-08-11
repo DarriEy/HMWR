@@ -6,6 +6,7 @@ import json
 import numpy as np # type: ignore
 import pandas as pd # type: ignore
 import re
+import cdo # type: ignore
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from utils.logging_utils import get_logger # type: ignore
@@ -199,7 +200,7 @@ class preProcessor:
             #raise
 
         self.cleanup_and_checks()
-        #self.write_summa_files()
+        self.write_summa_files()
 
     def cleanup_and_checks(self):
         """Perform cleanup and checks on the MAF output."""
@@ -207,9 +208,9 @@ class preProcessor:
         
         # Define paths
         path_general = Path(self.config.root_path) / f"domain_{self.config.domain_name}"
-        path_soil_type = path_general / 'parameters/soilclass/domain_stats_soil_classes.csv'
-        path_landcover_type = path_general / 'parameters/landclass/domain_stats_NA_NALCMS_landcover_2020_30m.csv'
-        path_elevation_mean = path_general / 'parameters/dem/domain_stats_elv.csv'
+        path_soil_type = path_general / f'parameters/soilclass/domain_{self.config.domain_name}_stats_soil_classes.csv'
+        path_landcover_type = path_general / f'parameters/landclass/domain_{self.config.domain_name}_stats_NA_NALCMS_landcover_2020_30m.csv'
+        path_elevation_mean = path_general / f'parameters/dem/domain_{self.config.domain_name}_stats_elv.csv'
 
         # Read files
         soil_type = pd.read_csv(path_soil_type)
@@ -262,9 +263,9 @@ class preProcessor:
         elevation_mean['mean'].fillna(0, inplace=True)
 
         # Save modified files
-        soil_type.to_csv(path_general / 'modified_domain_stats_soil_classes.csv', index=False)
-        landcover_type.to_csv(path_general / 'modified_domain_stats_NA_NALCMS_landcover_2020_30m.csv', index=False)
-        elevation_mean.to_csv(path_general / 'modified_domain_stats_elv.csv', index=False)
+        soil_type.to_csv(path_general / 'parameters/soilclass/modified_domain_stats_soil_classes.csv', index=False)
+        landcover_type.to_csv(path_general / 'parameters/landclass/modified_domain_stats_NA_NALCMS_landcover_2020_30m.csv', index=False)
+        elevation_mean.to_csv(path_general / 'parameters/dem/modified_domain_stats_elv.csv', index=False)
 
         self.logger.info("Cleanup and checks completed")
         print('cleanup and checks completed')
@@ -273,16 +274,19 @@ class preProcessor:
         """Write SUMMA input files."""
         self.logger.info("Writing SUMMA input files")
 
-        output_path = Path(self.config.root_path) / f"domain_{self.config.domain_name}" / "summa_setup"
+        output_path = Path(self.config.root_path) / f"domain_{self.config.domain_name}" / "settings/summa_setup/"
         output_path.mkdir(parents=True, exist_ok=True)
 
+        catchment_path = f'{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/catchment/{self.config.catchment_shp_name}'
+        river_network_path = f'{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/river_network/{self.config.river_network_shp_name}'
+        parameters_path = Path(self.config.root_path) / f"domain_{self.config.domain_name}" / "parameters"
+
         # Write attribute file
-        attr = write_summa_attribute(output_path, self.config.basins_path, self.config.rivers_path, 
-                                     Path(self.config.root_path) / f"domain_{self.config.domain_name}" / "gistool-outputs", 
+        attr = write_summa_attribute(output_path, catchment_path, river_network_path, parameters_path,
                                      self.config.frac_threshold, self.config.hru_discr, self.config.write_mizuroute_domain)
 
         # Write forcing file
-        forcing = write_summa_forcing(output_path, Path(self.config.root_path) / f"domain_{self.config.domain_name}" / "easymore-outputs", attr)
+        forcing = write_summa_forcing(output_path, f'{self.config.root_path}/domain_{self.config.domain_name}/forcing/3_basin_averaged_data', attr)
 
         # Write parameter trial file
         write_summa_paramtrial(attr, output_path)

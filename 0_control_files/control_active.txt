@@ -87,6 +87,7 @@ unify_soil                   | true
 frac_threshold               | 0.01
 write_mizuroute_domain       | true
 soil_mLayerDepth             | 0.1,0.25,0.5,2.15
+hru_discr                    | 1hru_gru
 
 # Observation settings
 streamflow_raw_path         | default                                   # If 'default', uses 'root_path/domain_[name]/observations/streamflow/raw_data'.
