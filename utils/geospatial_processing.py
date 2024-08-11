@@ -363,7 +363,6 @@ def subset_merit_hydrofabrics(config, logger):
 
             subset_basins['hru_to_seg'] = subset_basins['COMID']
             subset_basins = prepare_basin_attributes(subset_basins)
-
             subset_rivers = prepare_river_attributes(subset_rivers)
 
             subset_basins.to_file(output_basins_path)
@@ -530,11 +529,11 @@ def find_bounding_box_coordinates(config, logger):
 def prepare_basin_attributes(gdf):
     gdf['GRU_ID'] = gdf.index + 1
     gdf['area'] = gdf.to_crs(gdf.estimate_utm_crs()).area / 1e6  # area in km²
-    return gdf[['GRU_ID', 'hru_to_seg', 'area', 'geometry']]
+    return gdf#[['GRU_ID', 'hru_to_seg', 'area', 'geometry']]
 
 def prepare_river_attributes(gdf):
     gdf['length'] = gdf.to_crs(gdf.estimate_utm_crs()).length  # length in meters
-    return gdf[['COMID', 'NextDownID', 'slope', 'length', 'geometry']]
+    return gdf#[['COMID', 'NextDownID', 'slope', 'length', 'geometry']]
 
 def round_bounding_box(coords):
     lon = [coords[0], coords[2]]
@@ -725,7 +724,7 @@ def _generate_elevation_based_hrus(config, logger):
             hru_gdf = hru_gdf[hru_gdf['geometry'].notnull()]
             
             # Remove any columns that might cause issues with shapefiles
-            columns_to_keep = ['geometry', 'gruNo', 'gruId', 'elevClass', 'avg_elevation', 'area', 'hruNo', 'hruId', 'cent_lon', 'cent_lat']
+            columns_to_keep = ['COMID', 'geometry', 'gruNo', 'gruId', 'elevClass', 'avg_elevation', 'area', 'hruNo', 'hruId', 'cent_lon', 'cent_lat']
             hru_gdf = hru_gdf[columns_to_keep]
             
             # Rename columns to ensure they're not too long for shapefiles
@@ -1073,7 +1072,7 @@ def _generate_soil_class_based_hrus(config, logger):
             hru_gdf = hru_gdf[hru_gdf['geometry'].notnull()]
             
             # Remove any columns that might cause issues with shapefiles
-            columns_to_keep = ['geometry', 'gruNo', 'gruId', 'soilClass', 'area', 'hruNo', 'hruId', 'cent_lon', 'cent_lat']
+            columns_to_keep = ['COMID', 'geometry', 'gruNo', 'gruId', 'soilClass', 'area', 'hruNo', 'hruId', 'cent_lon', 'cent_lat']
             hru_gdf = hru_gdf[columns_to_keep]
 
             # Final check for valid polygons
@@ -1232,7 +1231,7 @@ def _generate_land_class_based_hrus(config, logger):
             hru_gdf = hru_gdf[hru_gdf['geometry'].notnull()]
             
             # Remove any columns that might cause issues with shapefiles
-            columns_to_keep = ['geometry', 'gruNo', 'gruId', 'landClass', 'area', 'hruNo', 'hruId', 'cent_lon', 'cent_lat', 'COMID']
+            columns_to_keep = ['COMID', 'geometry', 'gruNo', 'gruId', 'landClass', 'area', 'hruNo', 'hruId', 'cent_lon', 'cent_lat', 'COMID']
             hru_gdf = hru_gdf[columns_to_keep]
 
             # Final check for valid polygons
@@ -1365,7 +1364,7 @@ def _generate_radiation_based_hrus(config, logger):
             hru_gdf['geometry'] = hru_gdf['geometry'].apply(_clean_geometries)
             hru_gdf = hru_gdf[hru_gdf['geometry'].notnull()]
             
-            columns_to_keep = ['geometry', 'gruNo', 'gruId', 'radiationClass', 'avg_radiation', 'area', 'hruNo', 'hruId', 'cent_lon', 'cent_lat', 'COMID']
+            columns_to_keep = ['COMID', 'geometry', 'gruNo', 'gruId', 'radiationClass', 'avg_radiation', 'area', 'hruNo', 'hruId', 'cent_lon', 'cent_lat', 'COMID']
             hru_gdf = hru_gdf[columns_to_keep]
 
             valid_polygons = []

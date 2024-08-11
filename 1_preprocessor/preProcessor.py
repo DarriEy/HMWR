@@ -20,7 +20,6 @@ class preProcessor:
         self.config = config
         self.logger = get_logger('PreProcessor', self.config.root_path, self.config.domain_name, 'preprocessing')
 
-    
 
     def prepare_maf_json(self):
         """Prepare the JSON file for the Model Agnostic Framework."""
@@ -32,8 +31,8 @@ class preProcessor:
             },
             "args": {
                 "met": [{
-                    "dataset": "RDRS",
-                    "dataset-dir": "/project/6079554/data/meteorological-data/rdrsv2.1/",
+                    "dataset": self.config.forcing_dataset,
+                    "dataset-dir": f"{self.config.datatool_dataset_root}/rdrsv2.1/",
                     "variable": [
                         "RDRS_v2.1_P_P0_SFC",
                         "RDRS_v2.1_P_HU_09944",
@@ -48,11 +47,12 @@ class preProcessor:
                     "end-date": self.config.forcing_raw_time.split(',')[1] + "-12-31T12:00:00",
                     "lat-lims": "",
                     "lon-lims": "",
-                    "shape-file": str(self.config.basins_path),
+                    "shape-file": f"{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/catchment/{self.config.catchment_shp_name}",
                     "model": "",
                     "ensemble": "",
                     "prefix": f"domain_{self.config.domain_name}_",
                     "email": "",
+                    "cache": self.config.datatool_cache,
                     "account": self.config.datatool_account,
                     "_flags": [
                         "submit-job",
@@ -62,14 +62,14 @@ class preProcessor:
                 "gis": [
                     {
                         "dataset": "landsat",
-                        "dataset-dir": "/project/6079554/data/geospatial-data/Landsat",
+                        "dataset-dir": f"{self.config.gistool_dataset_root}/Landsat",
                         "variable": "land-cover",
                         "start-date": "2020",
                         "end-date": "2020",
-                        "output-dir": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/parameters/landclass/1_MODIS_raw_data"),
+                        "output-dir": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/parameters/landclass"),
                         "lat-lims": "",
                         "lon-lims": "",
-                        "shape-file": str(self.config.basins_path),
+                        "shape-file": f"{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/catchment/{self.config.catchment_shp_name}",
                         "print-geotiff": "true",
                         "stat": [
                             "frac",
@@ -77,10 +77,12 @@ class preProcessor:
                             "coords"
                         ],
                         "quantile": "",
+                        "lib-path": self.config.gistool_lib_path,
+                        "cache": self.config.gistool_cache,
                         "prefix": f"domain_{self.config.domain_name}_",
                         "email": "",
-                        "account": self.config.datatool_account,
-                        "fid": "COMID",
+                        "account": self.config.gistool_account,
+                        "fid": self.config.river_basin_shp_rm_hruid,
                         "_flags": [
                             "include-na",
                             "submit-job",
@@ -89,14 +91,15 @@ class preProcessor:
                     },
                     {
                         "dataset": "soil_class",
-                        "dataset-dir": "/project/6079554/data/geospatial-data/soil_classes",
+                        "dataset-dir": f"{self.config.gistool_dataset_root}/soil_classes",
                         "variable": "soil_classes",
                         "start-date": "",
                         "end-date": "",
-                        "output-dir": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/parameters/soilclass/1_soil_classes_global"),
+                        "output-dir": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/parameters/soilclass"),
                         "lat-lims": "",
                         "lon-lims": "",
-                        "shape-file": str(self.config.basins_path),
+                        "cache": self.config.gistool_cache,
+                        "shape-file": f"{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/catchment/{self.config.catchment_shp_name}",
                         "print-geotiff": "true",
                         "stat": [
                             "majority"
@@ -104,8 +107,9 @@ class preProcessor:
                         "quantile": "",
                         "prefix": f"domain_{self.config.domain_name}_",
                         "email": "",
-                        "account": self.config.datatool_account,
-                        "fid": "COMID",
+                        "lib-path": self.config.gistool_lib_path,
+                        "account": self.config.gistool_account,
+                        "fid": self.config.river_basin_shp_rm_hruid,
                         "_flags": [
                             "include-na",
                             "submit-job",
@@ -114,14 +118,17 @@ class preProcessor:
                     },
                     {
                         "dataset": "merit-hydro",
-                        "dataset-dir": "/project/6079554/data/geospatial-data/merit_hydro/raw_data/",
+                        "dataset-dir": f"{self.config.gistool_dataset_root}/MERIT-Hydro",
                         "variable": "elv,hnd",
                         "start-date": "",
                         "end-date": "",
-                        "output-dir": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/parameters/dem/1_MERIT_hydro_raw_data"),
+                        "output-dir":  str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/parameters/dem"),
                         "lat-lims": "",
                         "lon-lims": "",
-                        "shape-file": str(self.config.basins_path),
+                        "lib-path": self.config.gistool_lib_path,
+                        "cache": self.config.gistool_cache,
+                        "account": self.config.gistool_account,
+                        "shape-file": f"{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/catchment/{self.config.catchment_shp_name}",
                         "print-geotiff": "true",
                         "stat": [
                             "min",
@@ -140,9 +147,9 @@ class preProcessor:
                 ],
                 "remap": [{
                     "case-name": "remapped",
-                    "cache": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/forcing/3_temp_easymore"),
-                    "shapefile": str(self.config.basins_path),
-                    "shapefile-id": "COMID",
+                    "cache": self.config.easymore_cache,
+                    "shapefile": f"{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/catchment/{self.config.catchment_shp_name}",
+                    "shapefile-id": self.config.river_basin_shp_rm_hruid,
                     "source-nc": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/forcing/1_raw_data/**/*.nc*"),
                     "variable-lon": "lon",
                     "variable-lat": "lat",
@@ -155,9 +162,9 @@ class preProcessor:
                         "RDRS_v2.1_P_FB_SFC",
                         "RDRS_v2.1_P_FI_SFC"
                     ],
-                    "remapped-var-id": "COMID",
-                    "remapped-dim-id": "COMID",
-                    "output-dir": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/forcing/3_basin_averaged_data"),
+                    "remapped-var-id": self.config.river_basin_shp_rm_hruid,
+                    "remapped-dim-id": self.config.river_basin_shp_rm_hruid,
+                    "output-dir": f"{self.config.root_path}/domain_{self.config.domain_name}/forcing/3_basin_averaged_data" + '/',
                     "job-conf": str(Path(self.config.root_path) / "installs/MAF/02_model_agnostic_component/easymore-job.slurm"),
                     "_flags": [
                         "submit-job"
@@ -180,29 +187,29 @@ class preProcessor:
 
     def run_maf(self):
         """Run the Model Agnostic Framework."""
-        json_path = self.prepare_maf_json()
-        maf_script = Path(self.config.root_path) / "installs/MAF/02_model_agnostic_component/model-agnostic.sh"
+        #json_path = self.prepare_maf_json()
+        #maf_script = Path(self.config.root_path) / "installs/MAF/02_model_agnostic_component/model-agnostic.sh"
         
         # Run the MAF script
-        try:
-            subprocess.run([str(maf_script), str(json_path)], check=True)
-            self.logger.info("Model Agnostic Framework completed successfully.")
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Error running Model Agnostic Framework: {e}")
-            raise
+        #try:
+            #subprocess.run([str(maf_script), str(json_path)], check=True)
+            #self.logger.info("Model Agnostic Framework completed successfully.")
+        #except subprocess.CalledProcessError as e:
+            #self.logger.error(f"Error running Model Agnostic Framework: {e}")
+            #raise
 
         self.cleanup_and_checks()
-        self.write_summa_files()
+        #self.write_summa_files()
 
     def cleanup_and_checks(self):
         """Perform cleanup and checks on the MAF output."""
         self.logger.info("Performing cleanup and checks on MAF output")
         
         # Define paths
-        path_general = Path(self.config.root_path) / f"domain_{self.config.domain_name}" / "gistool-outputs"
-        path_soil_type = path_general / 'domain_stats_soil_classes.csv'
-        path_landcover_type = path_general / 'domain_stats_NA_NALCMS_landcover_2020_30m.csv'
-        path_elevation_mean = path_general / 'domain_stats_elv.csv'
+        path_general = Path(self.config.root_path) / f"domain_{self.config.domain_name}"
+        path_soil_type = path_general / 'parameters/soilclass/domain_stats_soil_classes.csv'
+        path_landcover_type = path_general / 'parameters/landclass/domain_stats_NA_NALCMS_landcover_2020_30m.csv'
+        path_elevation_mean = path_general / 'parameters/dem/domain_stats_elv.csv'
 
         # Read files
         soil_type = pd.read_csv(path_soil_type)
@@ -260,6 +267,7 @@ class preProcessor:
         elevation_mean.to_csv(path_general / 'modified_domain_stats_elv.csv', index=False)
 
         self.logger.info("Cleanup and checks completed")
+        print('cleanup and checks completed')
 
     def write_summa_files(self):
         """Write SUMMA input files."""
@@ -357,10 +365,10 @@ class preProcessor:
         self.logger.info("Starting preprocessing workflow")
 
         #self.config.domain_folder = make_folder_structure(self.config, self.logger)
-        self.prepare_spatial_data()
+        #self.prepare_spatial_data()
         #self.prepare_observation_data()
         
-        #self.prepare_forcing_and_parameters()
+        self.prepare_forcing_and_parameters()
         # Add other preprocessing steps here as needed
         
         self.logger.info("Preprocessing completed")

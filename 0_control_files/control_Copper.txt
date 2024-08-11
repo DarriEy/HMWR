@@ -60,7 +60,7 @@ fullDom_basins_name         | cat_pfaf_81_MERIT_Hydro_v07_Basins_v01_bugfix1.shp
 fullDom_rivers_name         | riv_pfaf_81_MERIT_Hydro_v07_Basins_v01_bugfix1.shp
 
 # Forcing settings
-forcing_dataset		        | era5					                      # Selection of which forcing dataset to use, current options are era5, rdrs and carra (depending on geographical availability)
+forcing_dataset		        | RDRS					                      # Selection of which forcing dataset to use, current options are era5, rdrs and carra (depending on geographical availability)
 forcing_raw_time            | 2010,2012                                   # Years to download: Jan-[from],Dec-[to].
 forcing_raw_space            | 63.63/-148.62/60.0/-139.07                                     # Bounding box of the shapefile: lat_max/lon_min/lat_min/lon_max. Will be converted to ERA5 download coordinates in script. Order and use of '/' to separate values is mandatory.
 forcing_time_step_size      | 3600                                        # Size of the forcing time step in [s]. Must be constant.
@@ -83,9 +83,23 @@ forcing_rdrs_variables      | RDRS_v2.1_P_FI_SFC,RDRS_v2.1_P_FB_SFC,RDRS_v2.1_A_
 # Datatool settings
 datatool_account            | def-mclark-ab
 datatool_output_dir         | default                                   # If 'default', uses 'root_path/domain_[name]/forcing/1_[dataset]_raw_data'.
-datatool_cache              | default                                   # If 'default', uses $SLURM_TMPDIR
+datatool_cache              | $SLURM_TMPDIR                                   # If 'default', uses $SLURM_TMPDIR
 datatool_prefix             | default                                   # If 'default', uses [domain]_[dataset]
-datatool_path               | default                                   # If 'default', uses 'root_path/installs/datatool/.
+datatool_path               | default                                  # If 'default', uses 'root_path/installs/datatool/.
+datatool_dataset_root       | /project/6079554/data/meteorological-data/
+
+# Gistool settings
+gistool_account             | def-mclark-ab
+gistool_output_dir          | default
+gistool_cache               | /home/darri/cache/
+gistool_prefix              | default
+gistool_path                | default
+gistool_lib_path            | /project/rrg-mclark/lib/
+gistool_dataset_root        | /project/rrg-mclark/data/geospatial-data/
+
+# Remapping settings        
+easymore_cache              | /home/darri/easymore/
+
 
 # MAF settings 
 num_land_cover               | 19
@@ -228,7 +242,7 @@ nsga2_n_obj                 | 2                                           # Numb
 
 
 # Discretisation settings
-domain_subsetting	        | delineate					# Subset your domain based on existing delineations. Options: Merit, TDX, NWX, delineate
+domain_subsetting	        | Merit					# Subset your domain based on existing delineations. Options: Merit, TDX, NWX, delineate
 domain_discretisation       | radiation_class             # Discretise your domain based on geospatial attributes, options: elevation, land_class, soil_class, radiation_class, none
 stream_order_threshold      | 5                     # Strahler stream order threshold for discretising subbasins
 elevation_band_size 	    | 250  					# Elevation band size in meters

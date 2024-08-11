@@ -18,6 +18,12 @@ def read_from_control(file, setting):
                 return line.split('|', 1)[1].split('#', 1)[0].strip()
     return None
 
+def is_default_path(control_folder, control_file, path, suffix):
+    if path == 'default':
+        return(make_default_path(control_folder, control_file, suffix))
+    else:
+        return Path(path)
+
 def make_default_path(control_folder, control_file, suffix):
     """Specify a default path based on the control file settings."""
     root_path = Path(read_from_control(control_folder/control_file, 'root_path'))
@@ -49,7 +55,7 @@ def get_config_path(control_folder, control_file, setting, default_suffix=None, 
             root_path = Path(read_from_control(control_folder/control_file, 'root_code_path'))
             return root_path / default_suffix
         else:
-            return make_default_path(control_folder, control_file, default_suffix)
+            return path
     return Path(path)
 
 @dataclass
@@ -265,6 +271,15 @@ class preConfig:
     snow_processed_path: Path
     snow_processed_name: str
     modis_ndsi_threshold: int
+    gistool_lib_path: str
+    gistool_cache: str
+    easymore_cache: str
+    datatool_cache: str
+    forcing_dataset: str
+    gistool_account: str
+    datatool_dataset_root: str
+    gistool_dataset_root: str
+    river_basin_shp_rm_hruid: str
 
     @classmethod
     def from_control_file(cls, control_file: Path):
@@ -278,6 +293,7 @@ class preConfig:
         root_path = Path(read_from_control(control_file, 'root_path'))
         domain_name = read_from_control(control_file, 'domain_name')
         catchment_shp_path = read_from_control(control_file, 'catchment_shp_path')
+        catchment_shp_name = read_from_control(control_file, 'catchment_shp_name')
         river_network_shp_path = read_from_control(control_file, 'river_network_shp_path')
         river_basin_shp_path = read_from_control(control_file, 'river_basin_shp_path')
         pour_point_shp_path = read_from_control(control_file, 'pour_point_shp_path')
@@ -296,7 +312,6 @@ class preConfig:
         domain_discretisation = read_from_control(control_file, 'domain_discretisation')
         river_basin_shp_name = read_from_control(control_file, 'river_basin_shp_name')
         pour_point_shp_name = read_from_control(control_file, 'pour_point_shp_name')
-        catchment_shp_name = read_from_control(control_file, 'catchment_shp_name')
         parameter_soil_tif_name = read_from_control(control_file, 'parameter_soil_tif_name')
         root_code_path = read_from_control(control_file, 'root_code_path')
         parameter_land_tif_name = read_from_control(control_file, 'parameter_land_tif_name')
@@ -312,6 +327,15 @@ class preConfig:
         snow_processed_path = read_from_control(control_file, 'snow_processed_path')
         snow_processed_name = read_from_control(control_file, 'snow_processed_name')
         modis_ndsi_threshold = int(read_from_control(control_file, 'modis_ndsi_threshold'))
+        gistool_lib_path = read_from_control(control_file, 'gistool_lib_path')
+        gistool_cache = read_from_control(control_file, 'gistool_cache')
+        easymore_cache = read_from_control(control_file, 'easymore_cache')
+        datatool_cache = read_from_control(control_file, 'datatool_cache')
+        forcing_dataset = read_from_control(control_file, 'forcing_dataset')
+        gistool_account = read_from_control(control_file, 'gistool_account')
+        datatool_dataset_root = read_from_control(control_file, 'datatool_dataset_root')
+        gistool_dataset_root = read_from_control(control_file, 'gistool_dataset_root')
+        river_basin_shp_rm_hruid = read_from_control(control_file, 'river_basin_shp_rm_hruid')
 
         return cls(
             root_path=root_path,
@@ -350,11 +374,16 @@ class preConfig:
             soil_mLayerDepth=soil_mLayerDepth,
             snow_processed_path=snow_processed_path,
             snow_processed_name=snow_processed_name,
-            modis_ndsi_threshold=modis_ndsi_threshold
-
-
-
-
+            modis_ndsi_threshold=modis_ndsi_threshold,
+            gistool_lib_path=gistool_lib_path,
+            gistool_cache=gistool_cache,
+            easymore_cache=easymore_cache,
+            forcing_dataset=forcing_dataset,
+            datatool_cache=datatool_cache,
+            gistool_account=gistool_account,
+            datatool_dataset_root=datatool_dataset_root,
+            gistool_dataset_root=gistool_dataset_root,
+            river_basin_shp_rm_hruid=river_basin_shp_rm_hruid
 
         )
    
