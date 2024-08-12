@@ -52,7 +52,7 @@ exe_name_mizuroute          | mizuroute.exe                               # Name
 
 # Forcing settings
 forcing_dataset		        | carra					                      # Selection of which forcing dataset to use, current options are era5, rdrs and carra (depending on geographical availability)
-forcing_raw_time            | 2003,2024                                   # Years to download: Jan-[from],Dec-[to].
+forcing_raw_time            | 2000,2024                                   # Years to download: Jan-[from],Dec-[to].
 forcing_raw_space           | 66.7267923041/-25.4261840479/63.0963829617/-13.009732225 # Bounding box of the shapefile: lat_max/lon_min/lat_min/lon_max. Will be converted to ERA5 download coordinates in script. Order and use of '/' to separate values is mandatory.
 forcing_time_step_size      | 3600                                        # Size of the forcing time step in [s]. Must be constant.
 forcing_measurement_height  | 3                                           # Reference height for forcing measurements [m].

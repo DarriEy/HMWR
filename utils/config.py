@@ -125,11 +125,12 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         moo_num_iter = int(read_from_control(control_folder/control_file, 'moo_num_iter'))
         nsga2_n_gen = int(read_from_control(control_folder/control_file, 'nsga2_n_gen'))
         nsga2_n_obj = int(read_from_control(control_folder/control_file, 'nsga2_n_obj'))
-        local_parameters_file = get_config_path(control_folder, control_file, 'local_parameters_file', 'settings/SUMMA/localParamInfo.txt')
-        basin_parameters_file = get_config_path(control_folder, control_file, 'basin_parameters_file', 'settings/SUMMA/basinParamInfo.txt')
+        local_parameters_file = make_default_path(control_folder, control_file, 'settings/SUMMA/localParamInfo.txt')
+        basin_parameters_file = make_default_path(control_folder, control_file, 'settings/SUMMA/basinParamInfo.txt')
         
         local_bounds_dict = read_param_bounds(local_parameters_file, params_to_calibrate)
         basin_bounds_dict = read_param_bounds(basin_parameters_file, basin_params_to_calibrate)
+
         local_bounds = [local_bounds_dict[param] for param in params_to_calibrate]
         basin_bounds = [basin_bounds_dict[param] for param in basin_params_to_calibrate]
         all_bounds = local_bounds + basin_bounds
@@ -144,7 +145,7 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         ngsize = int(read_from_control(control_folder/control_file, 'ngsize'))
         dds_r = float(read_from_control(control_folder/control_file, 'dds_r'))
         diagnostic_frequency = int(read_from_control(control_folder/control_file, 'diagnostic_frequency'))
-        MODIS_ndsi_threshold = int(read_from_control(control_folder/control_file, 'MODIS_ndsi_threshold'))
+        MODIS_ndsi_threshold = int(read_from_control(control_folder/control_file, 'modis_ndsi_threshold'))
         catchment_shp_name = read_from_control(control_folder/control_file, 'catchment_shp_name')
         ostrich_path = read_from_control(control_folder/control_file, 'ostrich_path')
         ostrich_exe = read_from_control(control_folder/control_file, 'ostrich_exe')
@@ -281,7 +282,8 @@ class preConfig:
     river_network_shp_name: str
     frac_threshold: float
     write_mizuroute_domain: str
-    hru_discr:str
+    hru_discr: str
+    model: str
  
 
     @classmethod
@@ -341,7 +343,7 @@ class preConfig:
         frac_threshold = float(read_from_control(control_file, 'frac_threshold'))
         write_mizuroute_domain = read_from_control(control_file, 'write_mizuroute_domain')
         hru_discr = read_from_control(control_file, 'hru_discr')
-
+        model = read_from_control(control_file, 'hru_discr')
 
         return cls(
             root_path=root_path,
@@ -391,7 +393,8 @@ class preConfig:
             river_basin_shp_rm_hruid=river_basin_shp_rm_hruid,
             river_network_shp_name=river_network_shp_name,
             write_mizuroute_domain=write_mizuroute_domain,
-            hru_discr=hru_discr
+            hru_discr=hru_discr,
+            model=model
 
         )
    

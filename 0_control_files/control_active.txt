@@ -53,7 +53,7 @@ exe_name_mizuroute          | mizuroute.exe                               # Name
 
 # Forcing settings
 forcing_dataset		        | era5					                      # Selection of which forcing dataset to use, current options are era5, rdrs and carra (depending on geographical availability)
-forcing_raw_time            | 2010,2012                                   # Years to download: Jan-[from],Dec-[to].
+forcing_raw_time            | 2010,2020                                   # Years to download: Jan-[from],Dec-[to].
 forcing_raw_space           | 51.76/-116.55/50.95/-115.5                  # Bounding box of the shapefile: lat_max/lon_min/lat_min/lon_max. Will be converted to ERA5 download coordinates in script. Order and use of '/' to separate values is mandatory.
 forcing_time_step_size      | 3600                                        # Size of the forcing time step in [s]. Must be constant.
 forcing_measurement_height  | 3                                           # Reference height for forcing measurements [m].
@@ -186,8 +186,8 @@ Optimisation_algorithm 	    | NSGA-II		    	                          # Options 
 optimization_metric 	    | KGEnp  					                      # Options: Root mean square error : "RMSE", Nash-Suthcliffe efficiency: "NSE", Kling-Gupta Efficiency: "KGE", KGE projected: "KGEp", Mean absolute error: "MAE"
 moo_optimization_metrics    | KGEnp,RMSE                                # optimisation metrics to use in multi objective optimisation
 optimization_results_file   | default				                   	  # If 'default', uses 'root_path/domain_[name]/settings/SUMMA/basinParamInfo.txt'
-calibration_period          | 2011-01-01, 2011-12-31                      # start_date, end_date in format YYYY-MM-DD
-evaluation_period           | 2012-01-01, 2012-12-31                      # start_date, end_date in format YYYY-MM-DD
+calibration_period          | 2011-01-01, 2015-12-31                      # start_date, end_date in format YYYY-MM-DD
+evaluation_period           | 2016-01-01, 2020-12-31                      # start_date, end_date in format YYYY-MM-DD
 iteration_results_file      | default
 basin_parameters_file  	    | default				                 	  # If 'default', uses 'root_path/domain_[name]/settings/SUMMA/basinParamInfo.txt'
 local_parameters_file  	    | default				                  	  # If 'default', uses 'root_path/domain_[name]/settings/SUMMA/localParamInfo.txt'

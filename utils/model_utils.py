@@ -475,7 +475,7 @@ class ModelRunner:
         Returns:
             bool: True if SUMMA run was successful, False otherwise.
         """
-        summa_path = get_config_path(Path('../../0_control_files'), 'control_active.txt', 'install_path_summa', f'{self.config.root_path}/installs/summa/bin/')
+        summa_path = Path(f'{self.config.root_path}/installs/summa/bin/')
         summa_exe = read_from_control(Path('../../0_control_files/control_active.txt'), 'exe_name_summa')
         
         filemanager_path = summa_destination_settings_path / self.config.filemanager_name
@@ -496,6 +496,7 @@ class ModelRunner:
         return True
 
     def run_mizuroute(self, mizuroute_rank_specific_path: Path, mizuroute_destination_settings_path: Path, attempt: int) -> bool:
+        
         """
         Run the mizuRoute model.
         
@@ -507,7 +508,8 @@ class ModelRunner:
         Returns:
             bool: True if mizuRoute run was successful, False otherwise.
         """
-        mizuroute_path = get_config_path(Path('../../0_control_files'), 'control_active.txt', 'install_path_summa', f'{self.config.root_path}/installs/mizuRoute/route/bin/')
+
+        mizuroute_path = Path(f'{self.config.root_path}/installs/mizuRoute/route/bin/')
         mizuroute_exe = read_from_control(Path('../../0_control_files/control_active.txt'), 'exe_name_mizuroute')
         mizuroute_control_path = mizuroute_destination_settings_path / self.config.mizu_control_file
         mizuroute_log_path = mizuroute_rank_specific_path / "mizuroute_logs"

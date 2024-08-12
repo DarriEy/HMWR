@@ -1,29 +1,29 @@
-import xarray as xr
+import xarray as xr # type: ignore
 import numpy as np
 from pathlib import Path
 from datetime import datetime, timedelta
-import os
 import sys
-import pandas as pd
+import pandas as pd # type: ignore
 import time
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from utils.control_file_utils import read_from_control, make_default_path
+from utils.control_file_utils import read_from_control, make_default_path # type: ignore
 
 # Control file handling
 controlFolder = Path('../../0_control_files')
 controlFile = 'control_active.txt'
 
 def construct_file_name_pattern(domain_name):
-    return f"{domain_name}_rdrsv2.1_*.nc"
+    return f"{domain_name}_rdrs_*.nc"
 
 # Raw data path
 rawPath = read_from_control(controlFolder/controlFile, 'forcing_rdrs_raw_path')
 if rawPath == 'default':
-    rawPath = make_default_path(controlFolder, controlFile,'forcing/1_RDRS_raw_data')
+    rawPath = make_default_path(controlFolder, controlFile,'forcing/1_raw_data')
 else:
     rawPath = Path(rawPath)
 
+print(rawPath)
 # Destination path for merged data
 mergePath = read_from_control(controlFolder/controlFile, 'forcing_merged_path')
 if mergePath == 'default':

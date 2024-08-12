@@ -1,11 +1,12 @@
 import os
-import easymore
+import easymore # type: ignore
 from pathlib import Path
 from shutil import copyfile
 from datetime import datetime
 import sys
+
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from utils.control_file_utils import read_from_control, make_default_path
+from utils.control_file_utils import read_from_control, make_default_path # type: ignore
 
 # --- Control file handling
 controlFolder = Path('../../0_control_files')
@@ -60,7 +61,7 @@ esmr.author_name = 'SUMMA public workflow scripts'
 esmr.license = 'Copernicus data use license: https://cds.climate.copernicus.eu/api/v2/terms/static/licence-to-use-copernicus-products.pdf'
 esmr.case_name = f"{read_from_control(controlFolder/controlFile, 'domain_name')}_{forcing_dataset}"
 
-esmr.var_names = ['airpres', 'LWRadAtm', 'SWRadAtm', 'pptrate', 'airtemp', 'spechum', 'windspd', 'geopotential']
+esmr.var_names = ['airpres', 'LWRadAtm', 'SWRadAtm', 'pptrate', 'airtemp', 'spechum', 'windspd']
 esmr.var_lat = lat_name
 esmr.var_lon = lon_name
 esmr.var_time = 'time'

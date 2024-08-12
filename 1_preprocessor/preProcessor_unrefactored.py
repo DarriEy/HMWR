@@ -16,15 +16,179 @@ from utils.file_utils import make_folder_structure # type: ignore
 from utils.summaflow import write_summa_attribute, write_summa_forcing, write_summa_paramtrial, write_summa_initial_conditions, write_summa_filemanager, copy_summa_static_files # type: ignore
 from utils.observation_preprocessing import preprocess_modis_data # type: ignore
 from utils.hypeflow import write_hype_geo_files, write_hype_info_filedir_files, write_hype_par_file, write_hype_forcing # type: ignore
-from utils.input_data_processing import prepare_maf_json, cleanup_and_checks  # type: ignore 
+from utils.input_data_processing import prepare_maf_json  # type: ignore 
 
 class preProcessor:
     def __init__(self, config: 'Config'): # type: ignore
         self.config = config
         self.logger = get_logger('PreProcessor', self.config.root_path, self.config.domain_name, 'preprocessing')
 
+    def prepare_maf_json(self):
+        """Prepare the JSON file for the Model Agnostic Framework."""
+        maf_config = {
+            "exec": {
+                "met": str(Path(self.config.root_path) / "installs/datatool/extract-dataset.sh"),
+                "gis": str(Path(self.config.root_path) / "installs/gistool/extract-gis.sh"),
+                "remap": "easymore cli"
+            },
+            "args": {
+                "met": [{
+                    "dataset": self.config.forcing_dataset,
+                    "dataset-dir": f"{self.config.datatool_dataset_root}/rdrsv2.1/",
+                    "variable": [
+                        "RDRS_v2.1_P_P0_SFC",
+                        "RDRS_v2.1_P_HU_09944",
+                        "RDRS_v2.1_P_TT_09944",
+                        "RDRS_v2.1_P_UVC_09944",
+                        "RDRS_v2.1_A_PR0_SFC",
+                        "RDRS_v2.1_P_FB_SFC",
+                        "RDRS_v2.1_P_FI_SFC"
+                    ],
+                    "output-dir": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/forcing/1_raw_data"),
+                    "start-date": self.config.forcing_raw_time.split(',')[0] + "-01-01T13:00:00",
+                    "end-date": self.config.forcing_raw_time.split(',')[1] + "-12-31T12:00:00",
+                    "lat-lims": "",
+                    "lon-lims": "",
+                    "shape-file": f"{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/catchment/{self.config.catchment_shp_name}",
+                    "model": "",
+                    "ensemble": "",
+                    "prefix": f"domain_{self.config.domain_name}_",
+                    "email": "",
+                    "cache": self.config.datatool_cache,
+                    "account": self.config.datatool_account,
+                    "_flags": [
+                        "submit-job",
+                        "parsable"
+                    ]
+                }],
+                "gis": [
+                    {
+                        "dataset": "landsat",
+                        "dataset-dir": f"{self.config.gistool_dataset_root}/Landsat",
+                        "variable": "land-cover",
+                        "start-date": "2020",
+                        "end-date": "2020",
+                        "output-dir": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/parameters/landclass"),
+                        "lat-lims": "",
+                        "lon-lims": "",
+                        "shape-file": f"{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/catchment/{self.config.catchment_shp_name}",
+                        "print-geotiff": "true",
+                        "stat": [
+                            "frac",
+                            "majority",
+                            "coords"
+                        ],
+                        "quantile": "",
+                        "lib-path": self.config.gistool_lib_path,
+                        "cache": self.config.gistool_cache,
+                        "prefix": f"domain_{self.config.domain_name}_",
+                        "email": "",
+                        "account": self.config.gistool_account,
+                        "fid": self.config.river_basin_shp_rm_hruid,
+                        "_flags": [
+                            "include-na",
+                            "submit-job",
+                            "parsable"
+                        ]
+                    },
+                    {
+                        "dataset": "soil_class",
+                        "dataset-dir": f"{self.config.gistool_dataset_root}/soil_classes",
+                        "variable": "soil_classes",
+                        "start-date": "",
+                        "end-date": "",
+                        "output-dir": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/parameters/soilclass"),
+                        "lat-lims": "",
+                        "lon-lims": "",
+                        "cache": self.config.gistool_cache,
+                        "shape-file": f"{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/catchment/{self.config.catchment_shp_name}",
+                        "print-geotiff": "true",
+                        "stat": [
+                            "majority"
+                        ],
+                        "quantile": "",
+                        "prefix": f"domain_{self.config.domain_name}_",
+                        "email": "",
+                        "lib-path": self.config.gistool_lib_path,
+                        "account": self.config.gistool_account,
+                        "fid": self.config.river_basin_shp_rm_hruid,
+                        "_flags": [
+                            "include-na",
+                            "submit-job",
+                            "parsable"
+                        ]
+                    },
+                    {
+                        "dataset": "merit-hydro",
+                        "dataset-dir": f"{self.config.gistool_dataset_root}/MERIT-Hydro",
+                        "variable": "elv,hnd",
+                        "start-date": "",
+                        "end-date": "",
+                        "output-dir":  str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/parameters/dem"),
+                        "lat-lims": "",
+                        "lon-lims": "",
+                        "lib-path": self.config.gistool_lib_path,
+                        "cache": self.config.gistool_cache,
+                        "account": self.config.gistool_account,
+                        "shape-file": f"{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/catchment/{self.config.catchment_shp_name}",
+                        "print-geotiff": "true",
+                        "stat": [
+                            "min",
+                            "max",
+                            "mean",
+                            "median"
+                        ],
+                        "prefix": f"domain_{self.config.domain_name}_",
+                        "email": "",
+                        "_flags": [
+                            "include-na",
+                            "submit-job",
+                            "parsable"
+                        ]
+                    }
+                ],
+                "remap": [{
+                    "case-name": "remapped",
+                    "cache": self.config.easymore_cache,
+                    "shapefile": f"{self.config.root_path}/domain_{self.config.domain_name}/shapefiles/catchment/{self.config.catchment_shp_name}",
+                    "shapefile-id": self.config.river_basin_shp_rm_hruid,
+                    "source-nc": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}/forcing/1_raw_data/**/*.nc*"),
+                    "variable-lon": "lon",
+                    "variable-lat": "lat",
+                    "variable": [
+                        "RDRS_v2.1_P_P0_SFC",
+                        "RDRS_v2.1_P_HU_09944",
+                        "RDRS_v2.1_P_TT_09944",
+                        "RDRS_v2.1_P_UVC_09944",
+                        "RDRS_v2.1_A_PR0_SFC",
+                        "RDRS_v2.1_P_FB_SFC",
+                        "RDRS_v2.1_P_FI_SFC"
+                    ],
+                    "remapped-var-id": self.config.river_basin_shp_rm_hruid,
+                    "remapped-dim-id": self.config.river_basin_shp_rm_hruid,
+                    "output-dir": f"{self.config.root_path}/domain_{self.config.domain_name}/forcing/3_basin_averaged_data" + '/',
+                    "job-conf": str(Path(self.config.root_path) / "installs/MAF/02_model_agnostic_component/easymore-job.slurm"),
+                    "_flags": [
+                        "submit-job"
+                    ]
+                }]
+            },
+            "order": {
+                "met": 1,
+                "gis": -1,
+                "remap": 2
+            }
+        }
+
+        # Save the JSON file
+        json_path = Path(self.config.root_path) / f"domain_{self.config.domain_name}/maf_config.json"
+        with open(json_path, 'w') as f:
+            json.dump(maf_config, f, indent=2)
+
+        return json_path
+
     def run_maf(self):
-        ''' Run the Model Agnostic Framework. '''
+        """Run the Model Agnostic Framework."""
         json_path = prepare_maf_json(self.config)
         maf_script = Path(self.config.root_path) / "installs/MAF/02_model_agnostic_component/model-agnostic.sh"
         
@@ -36,7 +200,76 @@ class preProcessor:
             self.logger.error(f"Error running Model Agnostic Framework: {e}")
             raise
 
-        cleanup_and_checks(self.config, self.logger)
+        self.cleanup_and_checks()
+        self.write_summa_files()
+
+    def cleanup_and_checks(self):
+        """Perform cleanup and checks on the MAF output."""
+        self.logger.info("Performing cleanup and checks on MAF output")
+        
+        # Define paths
+        path_general = Path(self.config.root_path) / f"domain_{self.config.domain_name}"
+        path_soil_type = path_general / f'parameters/soilclass/domain_{self.config.domain_name}_stats_soil_classes.csv'
+        path_landcover_type = path_general / f'parameters/landclass/domain_{self.config.domain_name}_stats_NA_NALCMS_landcover_2020_30m.csv'
+        path_elevation_mean = path_general / f'parameters/dem/domain_{self.config.domain_name}_stats_elv.csv'
+
+        # Read files
+        soil_type = pd.read_csv(path_soil_type)
+        landcover_type = pd.read_csv(path_landcover_type)
+        elevation_mean = pd.read_csv(path_elevation_mean)
+
+        # Sort by COMID
+        soil_type = soil_type.sort_values(by='COMID').reset_index(drop=True)
+        landcover_type = landcover_type.sort_values(by='COMID').reset_index(drop=True)
+        elevation_mean = elevation_mean.sort_values(by='COMID').reset_index(drop=True)
+
+        # Check if COMIDs are the same across all files
+        if not (len(soil_type) == len(landcover_type) == len(elevation_mean) and
+                (soil_type['COMID'] == landcover_type['COMID']).all() and
+                (landcover_type['COMID'] == elevation_mean['COMID']).all()):
+            raise ValueError("COMIDs are not consistent across soil, landcover, and elevation files")
+
+        # Process soil type
+        majority_value = soil_type['majority'].replace(0, np.nan).mode().iloc[0]
+        soil_type['majority'] = soil_type['majority'].replace(0, majority_value).fillna(majority_value)
+        if self.config.unify_soil:
+            soil_type['majority'] = majority_value
+
+        # Process landcover
+        for col in landcover_type.columns:
+            if col.startswith('frac_'):
+                landcover_type[col] = landcover_type[col].apply(lambda x: 0 if x < self.config.minimume_land_fraction else x)
+        
+        for index, row in landcover_type.iterrows():
+            frac_columns = [col for col in landcover_type.columns if col.startswith('frac_')]
+            row_sum = row[frac_columns].sum()
+            if row_sum > 0:
+                for col in frac_columns:
+                    landcover_type.at[index, col] /= row_sum
+
+        missing_columns = [f"frac_{i}" for i in range(1, self.config.num_land_cover+1) if f"frac_{i}" not in landcover_type.columns]
+        for col in missing_columns:
+            landcover_type[col] = 0
+
+        frac_columns = [col for col in landcover_type.columns if re.match(r'^frac_\d+$', col)]
+        frac_columns.sort(key=lambda x: int(re.search(r'\d+$', x).group()))
+        sorted_columns = [col for col in landcover_type.columns if col not in frac_columns] + frac_columns
+        landcover_type = landcover_type.reindex(columns=sorted_columns)
+
+        for col in frac_columns:
+            if landcover_type.loc[0, col] < 0.00001:
+                landcover_type.loc[0, col] = 0.00001
+
+        # Process elevation
+        elevation_mean['mean'].fillna(0, inplace=True)
+
+        # Save modified files
+        soil_type.to_csv(path_general / 'parameters/soilclass/modified_domain_stats_soil_classes.csv', index=False)
+        landcover_type.to_csv(path_general / 'parameters/landclass/modified_domain_stats_NA_NALCMS_landcover_2020_30m.csv', index=False)
+        elevation_mean.to_csv(path_general / 'parameters/dem/modified_domain_stats_elv.csv', index=False)
+
+        self.logger.info("Cleanup and checks completed")
+        print('cleanup and checks completed')
 
     def write_summa_files(self):
         """Write SUMMA input files."""
@@ -199,10 +432,9 @@ class preProcessor:
         self.config.domain_folder = make_folder_structure(self.config, self.logger)
         self.prepare_spatial_data()
         self.prepare_observation_data()
-        self.prepare_forcing_and_parameters()
         
         if self.config.model == 'SUMMA':
-            self.write_summa_files()
+            self.prepare_forcing_and_parameters()
         elif self.config.model == 'MESH':
             self.prepare_mesh_data()
         elif self.config.model == 'HYPE':
@@ -215,7 +447,10 @@ class preProcessor:
         
         self.logger.info("Preprocessing completed")
         
-        return {"domain_folder": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}")}
+        return {
+            "domain_folder": str(Path(self.config.root_path) / f"domain_{self.config.domain_name}"),
+            # Add other relevant information here
+        }
 
 def main():
     control_files = ["control_Copper.txt"] #["control_Makaha_Str_nr_Makaha__Oahu__HI.txt","control_Kamananui_Str_at_Maunawai__Oahu__HI.txt","control_Kaukonahua_Stream_blw_Wahiawa_Reservoir__Oahu__HI.txt","control_Honouliuli_Str_at_H-1_Freeway_nr_Waipahu__Oahu__HI.txt","control_Waikele_Str_at_Waipahu__Oahu__HI.txt","control_Opaeula_Str_nr_Wahiawa__Oahu__HI.txt","control_SF_Kaukonahua_Str_at_E_pump__nr_Wahiawa__Oahu__HI.txt","control_NF_Kaukonahua_Str_abv_RB__nr_Wahiawa__Oahu__HI.txt","control_N._Halawa_Str_nr_Quar._Stn._at_Halawa__Oahu__HI.txt","control_Kaluanui_Stream_nr_Punaluu__Oahu__HI.txt","control_N._Halawa_Str_nr_Honolulu__Oahu__HI.txt","control_Punaluu_Str_abv_Punaluu_Ditch_Intake__Oahu__HI.txt","control_Kahana_Str_at_alt_30_ft_nr_Kahana__Oahu__HI.txt","control_Waikane_Str_at_alt_75_ft_at_Waikane__Oahu__HI.txt","control_Waihee_Str_nr_Kahaluu__Oahu__HI.txt","control_Moanalua_Stream_nr_Kaneohe__Oahu__HI.txt","control_Waiahole_Stream_above_Kamehameha_Hwy__Oahu__HI.txt","control_Kalihi_Str_nr_Honolulu__Oahu__HI.txt","control_Kahaluu_Str_nr_Ahuimanu__Oahu__HI.txt","control_Makiki_Stream_at_King_St._bridge__Oahu__HI.txt","control_Heeia_Stream_at_Haiku_Valley_nr_Kaneohe__Oahu__HI.txt","control_Manoa-Palolo_Drainage_Canal_at_Moiliili__Oahu__HI.txt","control_Manoa_Stream_at_Woodlawn_Drive__Oahu__HI.txt","control_Waihi_Stream_at_Honolulu__Oahu__HI.txt","control_Waiakeakua_Str_at_Honolulu__Oahu__HI.txt","control_Kaneohe_Str_blw_Kamehameha_Hwy__Oahu__HI.txt","control_Kawa_Str_at_Kaneohe__Oahu__HI.txt","control_Pukele_Stream_near_Honolulu__Oahu__HI.txt","control_Makawao_Str_nr_Kailua__Oahu__HI.txt","control_Waimanalo_Str_at_Waimanalo__Oahu__HI.txt","control_Honouliuli_Stream_Tributary_near_Waipahu__Oahu__HI.txt","control_Kaunakakai_Gulch_at_altitude_75_feet__Molokai__HI.txt","control_Kawela_Gulch_near_Moku__Molokai__HI.txt","control_Halawa_Stream_near_Halawa__Molokai__HI.txt","control_Honokohau_Stream_near_Honokohau__Maui__HI.txt","control_Kahakuloa_Stream_near_Honokohau__Maui__HI.txt","control_Waihee_Rv_abv_Waihee_Dtch_intk_nr_Waihee__Maui__HI.txt","control_Wailuku_River_at_Kepaniwai_Park__Maui__HI.txt","control_Honopou_Stream_near_Huelo__Maui__HI.txt","control_Waikamoi_Str_abv_Kula_PL_intake_nr_Olinda__Maui_HI.txt","control_West_Wailuaiki_Stream_near_Keanae__Maui__HI.txt","control_Hanawi_Stream_near_Nahiku__Maui__HI.txt","control_Oheo_Gulch_at_dam_near_Kipahulu__Maui__HI.txt","control_Waimea_River_near_Waimea__Kauai__HI.txt","control_Kawaikoi_Stream_nr_Waimea__Kauai__HI.txt","control_Waialae_Str_at_alt_3_820_ft_nr_Waimea__Kauai__HI.txt","control_Wainiha_River_nr_Hanalei__Kauai__HI.txt","control_Hanalei_River_nr_Hanalei__Kauai__HI.txt","control_Halaulani_Str_at_alt_400_ft_nr_Kilauea__Kauai__HI.txt","control_EB_of_NF_Wailua_River_nr_Lihue__Kauai__HI.txt","control_Left_Branch_Opaekaa_Str_nr_Kapaa__Kauai__HI.txt","control_SF_Wailua_River_nr_Lihue__Kauai__HI.txt","control_Waiaha_Stream_at_Holualoa__HI.txt","control_Kawainui_Stream_nr_Kamuela__HI.txt","control_Alakahi_Stream_near_Kamuela__HI.txt","control_Paauau_Gulch_at_Pahala__HI.txt","control_Honolii_Stream_nr_Papaikou__HI.txt","control_Wailuku_River_at_Piihonua__HI.txt"]

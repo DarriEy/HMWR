@@ -1,13 +1,13 @@
 import os
 import numpy as np
-import xarray as xr
-import pandas as pd
+import xarray as xr # type: ignore
+import pandas as pd # type: ignore
 from pathlib import Path
 from shutil import copyfile
 from datetime import datetime
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-from utils.control_file_utils import read_from_control, make_default_path
+from utils.control_file_utils import read_from_control, make_default_path # type: ignore
 
 # --- Control file handling
 controlFolder = Path('../../0_control_files')
@@ -129,4 +129,4 @@ def create_log(path, suffix, script_name):
 
 create_log(forcing_summa_path, '_temperature_lapse_and_datastep.txt', '3_temperature_lapsing_and_datastep.py')
 
-print(f"Completed processing of {forcing_dataset.upper()} forcing files with time-varying temperature lapsing and data step addition.")
+print(f"Completed processing of {forcing_dataset.upper()} forcing files with temperature lapsing and data step addition.")

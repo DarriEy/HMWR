@@ -16,9 +16,7 @@ airtemp            | 1
 !  model variables 
 ! -------------------
 averageRoutedRunoff   | 1   
-scalarTotalET         | 1  
 scalarSWE             | 24  
-scalarSnowDepth          | 24
 scalarGroundSnowFraction | 24
 
 

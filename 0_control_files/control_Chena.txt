@@ -53,7 +53,7 @@ exe_name_mizuroute          | mizuroute.exe                               # Name
 
 # Forcing settings
 forcing_dataset		        | rdrs					                      # Selection of which forcing dataset to use, current options are era5, rdrs and carra (depending on geographical availability)
-forcing_raw_time            | 2008,2018                                   # Years to download: Jan-[from],Dec-[to].
+forcing_raw_time            | 2010,2012                                   # Years to download: Jan-[from],Dec-[to].
 forcing_raw_space           | 65.4/-146.6/64.5/-144.4                     # Bounding box of the shapefile: lat_max/lon_min/lat_min/lon_max. Will be converted to ERA5 download coordinates in script. Order and use of '/' to separate values is mandatory.
 forcing_time_step_size      | 3600                                        # Size of the forcing time step in [s]. Must be constant.
 forcing_measurement_height  | 3                                           # Reference height for forcing measurements [m].
@@ -139,7 +139,7 @@ intersect_routing_path      | default                                     # If '
 intersect_routing_name      | catchment_with_routing_basins.shp           # Name of the shapefile with intersection between hydrologic model catchments and routing model catchments.
 
 # Experiment settings - general
-experiment_id               | run_Chena_Near_Two_Rivers_basins_1          # Descriptor of the modelling experiment; used as output folder name.
+experiment_id               | run_rdrs          # Descriptor of the modelling experiment; used as output folder name.
 experiment_time_start       | default                      	              # Simulation start. If 'default', constructs this from 'forcing_raw_time' setting and uses all downloaded forcing data; e.g. '1979-01-01 00:00'.
 experiment_time_end         | default                                     # Simulation end. If 'default', constructs this from 'forcing_raw_time' setting and uses all downloaded forcing data; e.g. '1979-12-31 23:00'. 
 experiment_output_summa     | default                                     # If 'default', uses 'root_path/domain_[name]/simulations/[experiment_id]/SUMMA'.
@@ -180,8 +180,8 @@ settings_mizu_make_outlet   | n/a                                         # Segm
 Optimisation_algorithm 	    | DE		    	                          # Options are: Differential Evolution: "DE", Particle Swarm: "PSO", Shuffled Complex Evolution: "SCE-UA", Basin-hopping" "Basin-hopping", Dynamically Dimensioned Search "DDS"
 optimization_metric 	    | KGE  					                      # Options: Root mean square error : "RMSE", Nash-Suthcliffe efficiency: "NSE", Kling-Gupta Efficiency: "KGE", KGE projected: "KGEp", Mean absolute error: "MAE"
 optimization_results_file   | default				                   	  # If 'default', uses 'root_path/domain_[name]/settings/SUMMA/basinParamInfo.txt'
-calibration_period          | 2010-01-01, 2014-12-31                      # start_date, end_date in format YYYY-MM-DD
-evaluation_period           | 2015-01-01, 2018-12-31                      # start_date, end_date in format YYYY-MM-DD
+calibration_period          | 2011-01-01, 2015-12-31                      # start_date, end_date in format YYYY-MM-DD
+evaluation_period           | 2016-01-01, 2020-12-31                      # start_date, end_date in format YYYY-MM-DD
 iteration_results_file      | default
 basin_parameters_file  	    | default				                 	  # If 'default', uses 'root_path/domain_[name]/settings/SUMMA/basinParamInfo.txt'
 local_parameters_file  	    | default				                  	  # If 'default', uses 'root_path/domain_[name]/settings/SUMMA/localParamInfo.txt'

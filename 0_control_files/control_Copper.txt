@@ -41,6 +41,9 @@ river_basin_shp_hru_to_seg  | hru_to_seg                                  # Name
 # Shapefile settings - SUMMA-to-mizuRoute 
 river_basin_needs_remap     | no                                          # 'no' if routing basins map 1:1 onto model GRUs. 'yes' if river segments span multiple GRUs or if multiple segments are inside a single GRU.
 
+# Model specific settings
+model                       | SUMMA                                       # options SUMMA
+
 
 # Install settings
 github_summa                | https://github.com/CH-Earth/summa           # Replace this with the path to your own fork if you forked the repo.
@@ -120,7 +123,6 @@ snow_raw_path               | default                                   # If 'de
 snow_raw_name               | CanSWE-CanEEN_1928-2022_v5.csv
 snow_processed_path         | default                                   # If 'default', uses 'root_path/domain_[name]/observations/preprocessed/raw_data'.
 snow_processed_name         | BowAtBanff_filtered_snow_observations.csv
-
 
 
 # Parameter settings - DEM
@@ -244,7 +246,7 @@ nsga2_n_obj                 | 2                                           # Numb
 
 # Discretisation settings
 domain_subsetting	        | Merit					# Subset your domain based on existing delineations. Options: Merit, TDX, NWX, delineate
-domain_discretisation       | radiation_class             # Discretise your domain based on geospatial attributes, options: elevation, land_class, soil_class, radiation_class, none
+domain_discretisation       | elevation             # Discretise your domain based on geospatial attributes, options: elevation, land_class, soil_class, radiation_class, none
 stream_order_threshold      | 5                     # Strahler stream order threshold for discretising subbasins
 elevation_band_size 	    | 250  					# Elevation band size in meters
 min_hru_size 		        | 1 					                     # Minimum HRU size in square kilometers
