@@ -6,6 +6,8 @@ import numpy as np # type: ignore
 from datetime import datetime
 from typing import Union
 import subprocess
+import os
+import glob
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from utils.logging_utils import get_logger # type: ignore
@@ -69,6 +71,8 @@ class Optimizer:
         if self.rank == 0:
             self.logger.info(f"Starting optimization with {self.config.algorithm} algorithm")
         
+        
+
         if self.config.algorithm in ["DE", "PSO", "SCE-UA", "Basin-hopping", "DDS"]:
             result = self.run_single_objective_optimization()
         elif self.config.algorithm in ["NSGA-II", "NSGA-III", "MOEA/D", "SMS-EMOA", "Borg-MOEA", "MOPSO"]:
@@ -196,27 +200,20 @@ class Optimizer:
         
         return best_params, best_values
 
-    def run_ostrich_optimization(self):
+    def run_ostrich_optimization(self) -> Tuple[List[float], float]:
         self.prepare_ostrich_files()
-        ostrich_path = f"/{self.config.ostrich_path}/{self.config.ostrich_exe}"
-
-        # Run OSTRICH
-        subprocess.run([ostrich_path, "ostrich.txt"], check=True)
-        
-        # Parse OSTRICH results
-        best_params, best_value = self.parse_ostrich_results()
-        
-        return best_params, best_value
+        self.run_ostrich()
+        return self.parse_ostrich_results()
 
     def prepare_ostrich_files(self):
-        # Generate OSTRICH configuration files
-        # This would include creating the ostrich.txt file and any necessary
-        # model input files that OSTRICH needs to run your model
         pass
+    
+    def run_ostrich(self):
+        ostrich_command = f"mpiexec -n {self.size} {self.config.ostrich_path}/{self.config.ostrich_exe}"
+        result = subprocess.run(ostrich_command, shell=True, check=True, capture_output=True, text=True)
+        pass   
 
-    def parse_ostrich_results(self):
-        # Read and interpret OSTRICH output files
-        # Extract best parameters and objective value
+    def parse_ostrich_results(self) -> Tuple[List[float], float]:
         pass
 
 def main() -> None:

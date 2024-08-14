@@ -52,7 +52,7 @@ exe_name_summa              | summa.exe                                   # Name
 exe_name_mizuroute          | mizuroute.exe                               # Name of the compiled executable.
 
 # Forcing settings
-forcing_dataset		        | rdrs					                      # Selection of which forcing dataset to use, current options are era5, rdrs and carra (depending on geographical availability)
+forcing_dataset		        | era5					                      # Selection of which forcing dataset to use, current options are era5, rdrs and carra (depending on geographical availability)
 forcing_raw_time            | 2010,2012                                   # Years to download: Jan-[from],Dec-[to].
 forcing_raw_space           | 65.4/-146.6/64.5/-144.4                     # Bounding box of the shapefile: lat_max/lon_min/lat_min/lon_max. Will be converted to ERA5 download coordinates in script. Order and use of '/' to separate values is mandatory.
 forcing_time_step_size      | 3600                                        # Size of the forcing time step in [s]. Must be constant.
@@ -139,7 +139,7 @@ intersect_routing_path      | default                                     # If '
 intersect_routing_name      | catchment_with_routing_basins.shp           # Name of the shapefile with intersection between hydrologic model catchments and routing model catchments.
 
 # Experiment settings - general
-experiment_id               | run_rdrs          # Descriptor of the modelling experiment; used as output folder name.
+experiment_id               | run_era5          # Descriptor of the modelling experiment; used as output folder name.
 experiment_time_start       | default                      	              # Simulation start. If 'default', constructs this from 'forcing_raw_time' setting and uses all downloaded forcing data; e.g. '1979-01-01 00:00'.
 experiment_time_end         | default                                     # Simulation end. If 'default', constructs this from 'forcing_raw_time' setting and uses all downloaded forcing data; e.g. '1979-12-31 23:00'. 
 experiment_output_summa     | default                                     # If 'default', uses 'root_path/domain_[name]/simulations/[experiment_id]/SUMMA'.

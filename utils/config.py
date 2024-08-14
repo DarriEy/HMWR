@@ -96,8 +96,24 @@ class Config:
     snow_station_shapefile_name: str
     MODIS_ndsi_threshold: int
     catchment_shp_name: str
-    ostrich_path: str
+    ostrich_path: Path
     ostrich_exe: str
+    ostrich_algorithm: str
+    ostrich_metric: str
+    ostrich_swarm_size: int
+    ostrich_output_file: str
+    basin_parameters_file:str
+    basin_parameters_file_name: str
+    local_parameters_file_name: str
+    trial_param_file: str
+    settings_summa_attributes: str
+    settings_summa_output: str
+    settings_summa_filemanager: str
+    exe_name_summa: str
+    output_path: str
+    output_prefix: str
+    root_code_path: str
+    
 
 def initialize_config(rank: int, comm: MPI.Comm) -> Config:
     control_folder = Path('../../0_control_files')
@@ -127,9 +143,11 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         nsga2_n_obj = int(read_from_control(control_folder/control_file, 'nsga2_n_obj'))
         local_parameters_file = make_default_path(control_folder, control_file, 'settings/SUMMA/localParamInfo.txt')
         basin_parameters_file = make_default_path(control_folder, control_file, 'settings/SUMMA/basinParamInfo.txt')
-        
+        basin_parameters_file_name = read_from_control(control_folder/control_file, 'basin_parameters_file_name')
+        local_parameters_file_name = read_from_control(control_folder/control_file, 'local_parameters_file_name')
         local_bounds_dict = read_param_bounds(local_parameters_file, params_to_calibrate)
         basin_bounds_dict = read_param_bounds(basin_parameters_file, basin_params_to_calibrate)
+        trial_param_file = read_from_control(control_folder/control_file, 'trial_param_file')
 
         local_bounds = [local_bounds_dict[param] for param in params_to_calibrate]
         basin_bounds = [basin_bounds_dict[param] for param in basin_params_to_calibrate]
@@ -147,10 +165,25 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         diagnostic_frequency = int(read_from_control(control_folder/control_file, 'diagnostic_frequency'))
         MODIS_ndsi_threshold = int(read_from_control(control_folder/control_file, 'modis_ndsi_threshold'))
         catchment_shp_name = read_from_control(control_folder/control_file, 'catchment_shp_name')
-        ostrich_path = read_from_control(control_folder/control_file, 'ostrich_path')
+        ostrich_path = Path(read_from_control(control_folder/control_file, 'ostrich_path'))
         ostrich_exe = read_from_control(control_folder/control_file, 'ostrich_exe')
+        ostrich_algorithm = read_from_control(control_folder/control_file, 'ostrich_algorithm')
+        ostrich_metric = read_from_control(control_folder/control_file, 'ostrich_metric')
+        ostrich_swarm_size = int(read_from_control(control_folder/control_file, 'ostrich_swarm_size'))
+        ostrich_output_file = read_from_control(control_folder/control_file, 'ostrich_output_file')
+        settings_summa_attributes = read_from_control(control_folder/control_file, 'settings_summa_attributes')
+        settings_summa_output = read_from_control(control_folder/control_file, 'settings_summa_output')
+        settings_summa_filemanager = read_from_control(control_folder/control_file, 'settings_summa_filemanager')
+        exe_name_summa = read_from_control(control_folder/control_file, 'exe_name_summa')
+        output_path = read_from_control(control_folder/control_file, 'output_path')
+        output_prefix = read_from_control(control_folder/control_file, 'output_prefix')
+        root_code_path = read_from_control(control_folder/control_file, 'root_code_path')
 
     else:
+        ostrich_algorithm = None
+        ostrich_metric = None
+        ostrich_swarm_size = None
+        ostrich_output_file = None
         root_path = None
         domain_name = None
         experiment_id = None
@@ -189,6 +222,17 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         catchment_shp_name = None
         ostrich_path = None
         ostrich_exe = None
+        basin_parameters_file = None
+        basin_parameters_file_name = None
+        local_parameters_file_name = None
+        trial_param_file = None
+        settings_summa_attributes = None
+        settings_summa_output = None
+        settings_summa_filemanager = None
+        exe_name_summa = None
+        output_path = None
+        output_prefix = None
+        root_code_path = None
 
     config = Config(
         root_path=comm.bcast(root_path, root=0),
@@ -228,7 +272,22 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         MODIS_ndsi_threshold=comm.bcast(MODIS_ndsi_threshold, root=0),
         catchment_shp_name=comm.bcast(catchment_shp_name, root=0),
         ostrich_path=comm.bcast(ostrich_path, root=0),
-        ostrich_exe=comm.bcast(ostrich_exe, root=0)
+        ostrich_exe=comm.bcast(ostrich_exe, root=0),
+        ostrich_algorithm=comm.bcast(ostrich_algorithm, root=0),
+        ostrich_metric=comm.bcast(ostrich_metric, root=0),
+        ostrich_swarm_size=comm.bcast(ostrich_swarm_size, root=0),
+        ostrich_output_file=comm.bcast(ostrich_output_file, root=0),
+        basin_parameters_file=comm.bcast(basin_parameters_file, root=0),
+        basin_parameters_file_name=comm.bcast(basin_parameters_file_name,root=0),
+        local_parameters_file_name=comm.bcast(local_parameters_file_name,root=0),
+        trial_param_file=comm.bcast(trial_param_file,root=0),
+        settings_summa_attributes=comm.bcast(settings_summa_attributes,root=0),
+        settings_summa_output=comm.bcast(settings_summa_output,root=0),
+        settings_summa_filemanager=comm.bcast(settings_summa_filemanager,root=0),
+        exe_name_summa=comm.bcast(exe_name_summa,root=0),
+        output_path=comm.bcast(output_path,root=0),
+        output_prefix=comm.bcast(output_prefix,root=0),
+        root_code_path=comm.bcast(root_code_path,root=0)
     )
 
     return config

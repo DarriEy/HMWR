@@ -162,6 +162,7 @@ settings_summa_coldstate    | coldState.nc                                # Name
 settings_summa_trialParams  | trialParams.nc                              # Name of the file that can contain trial parameter values (note, can be empty of any actual parameter values but must be provided and must contain an 'hruId' variable).
 settings_summa_forcing_list | forcingFileList.txt                         # Name of the file that has the list of forcing files.
 settings_summa_attributes   | attributes.nc                               # Name of the attributes file.
+settings_summa_output       | outputControl.txt
 settings_summa_connect_HRUs | no                                          # Attribute setting: "no" or "yes". Tricky concept, see README in ./5_model_input/SUMMA/3f_attributes. If no; all HRUs modeled as independent columns (downHRUindex = 0). If yes; HRUs within each GRU are connected based on relative HRU elevation (highest = upstream, lowest = outlet). 
 settings_summa_trialParam_n | 1                                           # Number of trial parameter specifications. Specify 0 if none are wanted (they can still be included in this file but won't be read).
 settings_summa_trialParam_1 | maxstep,900                                 # Name of trial parameter and value to assign. Value assumed to be float.
@@ -182,15 +183,13 @@ settings_mizu_within_basin  | 0                                           # '0' 
 settings_mizu_make_outlet   | 71028585                                    # Segment ID or IDs that should be set as network outlet. Specify multiple IDs separated by commas: X,Y,Z. Specify no IDs as: n/a. Note that this can also be done in the network shapefile.
 
 # Optimization settings
-Optimisation_algorithm 	    | NSGA-II		    	                          # Options are: Differential Evolution: "DE", Particle Swarm: "PSO", Shuffled Complex Evolution: "SCE-UA", Basin-hopping" "Basin-hopping", Dynamically Dimensioned Search "DDS", or NSGA-II or NSGA-III or Borg-MOEA or SMS-EMOA or MOEA/D or MOPSO
+Optimisation_algorithm 	    | SMS-EMOA		    	                          # Options are: Differential Evolution: "DE", Particle Swarm: "PSO", Shuffled Complex Evolution: "SCE-UA", Basin-hopping" "Basin-hopping", Dynamically Dimensioned Search "DDS", or NSGA-II or NSGA-III or Borg-MOEA or SMS-EMOA or MOEA/D or MOPSO, OSTRICH
 optimization_metric 	    | KGEnp  					                      # Options: Root mean square error : "RMSE", Nash-Suthcliffe efficiency: "NSE", Kling-Gupta Efficiency: "KGE", KGE projected: "KGEp", Mean absolute error: "MAE"
 moo_optimization_metrics    | KGEnp,RMSE                                # optimisation metrics to use in multi objective optimisation
 optimization_results_file   | default				                   	  # If 'default', uses 'root_path/domain_[name]/settings/SUMMA/basinParamInfo.txt'
 calibration_period          | 2011-01-01, 2015-12-31                      # start_date, end_date in format YYYY-MM-DD
 evaluation_period           | 2016-01-01, 2020-12-31                      # start_date, end_date in format YYYY-MM-DD
 iteration_results_file      | default
-basin_parameters_file  	    | default				                 	  # If 'default', uses 'root_path/domain_[name]/settings/SUMMA/basinParamInfo.txt'
-local_parameters_file  	    | default				                  	  # If 'default', uses 'root_path/domain_[name]/settings/SUMMA/localParamInfo.txt'
 model_decisions_comparison  | default
 model_decisions_path  	    | default
 model_run_folder  	        | default				                	  # If 'default', uses 'root_code_path/6_model_runs'
@@ -205,12 +204,30 @@ swrmsize		            | 150					                          # Swarm size for parti
 ngsize			            | 150					                          # ngsize for shuffled complex evolution algorithm
 dds_r                       | 0.2                                         # DDS perturbation parameter
 sensitivity_output_folder   | default                                     # If 'default', uses 'root_path/sensitivity_analysis'
-params_to_calibrate         | tempCritRain,albedoDecayRate,newSnowDenMin,newSnowDenMultTemp,Fcapil,k_snow,soil_dens_intr,thCond_soil,theta_sat,theta_res,k_soil,k_macropore,vGn_alpha,f_impede,aquiferBaseflowRate
+
+
+# Calibration parameters settings
+basin_parameters_file  	    | default				                 	  # If 'default', uses 'root_path/domain_[name]/settings/SUMMA/basinParamInfo.txt'
+local_parameters_file  	    | default				                  	  # If 'default', uses 'root_path/domain_[name]/settings/SUMMA/localParamInfo.txt'
+basin_parameters_file_name  | basinParamInfo.txt
+local_parameters_file_name  | localParamInfo.txt
+trial_param_file            | trialParams.nc
+output_path                 | temp
+output_prefix               | trial
+params_to_calibrate         | newSnowDenMin,newSnowDenMultTemp,Fcapil,k_snow,soil_dens_intr,albedoDecayRate,tempCritRain,thCond_soil,theta_sat,theta_res,k_soil,k_macropore,vGn_alpha,f_impede,aquiferBaseflowRate
 basin_params_to_calibrate   | basin__aquiferHydCond,routingGammaScale,routingGammaShape,basin__aquiferBaseflowExp,basin__aquiferScaleFactor
 diagnostic_frequency        | 9
-ostrich_path                | /Users/darrieythorsson/compHydro/data/CWARHM_data/installs/Ostrich_v17.12.19/Source/OstrichMPI  # Path to ostrich executable 
-ostrich_exe                 | OstrichMPI
 modis_ndsi_threshold        | 5
+
+
+# Ostrich settings
+ostrich_path                | /Users/darrieythorsson/compHydro/data/CWARHM_data/installs/Ostrich_v17.12.19/Source/  # Path to ostrich executable 
+ostrich_exe                 | Ostrich
+ostrich_algorithm            | DDS                                     # Options: DDS, PADDS, PSO, APPSO
+ostrich_metric               | GCOP                                    # Options: GCOP (single-objective), PATO (multi-objective)
+ostrich_swarm_size           | 20                                      # For PSO/APPSO algorithms
+ostrich_output_file          | ostrich_output.txt                      # Name of OSTRICH output file
+
 
 # Multi objective optimisation settings
 moo_optimisation_algorithm  | SMS-EMOA                                    # NSGA-II or NSGA-III or Borg-MOEA or SMS-EMOA or MOEA/D or MOPSO
