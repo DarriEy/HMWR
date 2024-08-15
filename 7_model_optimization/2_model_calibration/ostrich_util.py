@@ -22,7 +22,9 @@ class OstrichOptimizer:
         self.config = config
         self.comm = comm
         self.rank = rank
+        self.size = comm.Get_size()
         self.logger = get_logger('OstrichOptimizer', config.root_path, config.domain_name, config.experiment_id)
+        self.use_mpi = config.use_mpi
 
     def prepare_ostrich_files(self):
         self.generate_multiplier_bounds()
@@ -133,8 +135,8 @@ class OstrichOptimizer:
 
     def get_mizuroute_output_path(self):
         mizuroute_settings_path = self.get_mizuroute_settings_path()
-        output_dir = mizuroute_settings_path.parent / "mizuRoute_output"
-        output_file = output_dir / f"{self.config.experiment_id}.h.*.nc"  # Adjust the file pattern as needed
+        output_dir = mizuroute_settings_path.parent
+        output_file = output_dir / f"{self.config.experiment_id}_rank{self.rank + 1}.h.*.nc"  # Adjust the file pattern as needed
         matching_files = list(output_dir.glob(output_file.name))
         
         if not matching_files:
@@ -148,25 +150,28 @@ class OstrichOptimizer:
         template_file = self.config.ostrich_path / 'ostIn.tpl'
         ostrich_config = self.config.ostrich_path / 'ostIn.txt'
         
-        # Create template file if it doesn't exist
-        if not template_file.exists():
-            self.logger.info(f"Creating Ostrich template file: {template_file}")
-            template_content = """ProgramType ALGORITHM_PLACEHOLDER
+        self.logger.info(f"Creating Ostrich template file: {template_file}")
+        template_content = f"""ProgramType {self.config.ostrich_algorithm}
 
 BeginFilePairs
 multipliers.tpl ; multipliers.txt
 EndFilePairs
 
 BeginExtraFiles
+run_trial.sh
 run_trial.py
 EndExtraFiles
 
 BeginParams
-PARAM_DEFINITIONS_PLACEHOLDER
+{self.generate_param_definitions()}
 EndParams
 
+BeginObservations
+Obj1 1.0 1.0 ostrich_objective.txt ; OST_NULL 0 1
+EndObservations
+
 BeginResponseVars
-Obj1 ostrich_objective.txt ; OST_ITER 0 1
+Obj1 ostrich_objective.txt ; OST_NULL 0 1
 EndResponseVars
 
 BeginGCOP
@@ -180,23 +185,24 @@ BeginObjFun
 Obj1
 EndObjFun
 
-ModelExecutable MODEL_COMMAND_PLACEHOLDER
+ModelExecutable ./run_trial.sh
 
-BeginAlgOptions
-RandomSeed RANDOM_SEED_PLACEHOLDER
-MaxIterations MAX_ITERATIONS_PLACEHOLDER
-EndAlgOptions
+BeginDDSAlg
+PerturbationValue 0.2
+MaxIterations {self.config.num_iter}
+UseRandomParamValues
+EndDDSAlg
 """
-            with open(template_file, 'w') as f:
-                f.write(template_content)
+        with open(template_file, 'w') as f:
+            f.write(template_content)
         
         # Read template and create actual config
         with open(template_file, 'r') as src, open(ostrich_config, 'w') as dst:
             content = src.read()
-            
+        
             # Replace placeholders
             content = content.replace('ALGORITHM_PLACEHOLDER', self.config.ostrich_algorithm)
-            content = content.replace('MODEL_COMMAND_PLACEHOLDER', f"python {self.config.root_code_path}/7_model_optimization/2_model_calibration/run_trial.py")
+            content = content.replace('MODEL_COMMAND_PLACEHOLDER', './run_trial.sh')
             content = content.replace('RANDOM_SEED_PLACEHOLDER', str(int(time.time() * 1000000) % 1000000000))
             content = content.replace('MAX_ITERATIONS_PLACEHOLDER', str(self.config.num_iter))
             
@@ -231,59 +237,71 @@ EndAlgOptions
             return None, None
 
     def run_ostrich(self):
-        self.logger.info("Starting Ostrich optimization")
-        
-        ostrich_exe = self.config.ostrich_path / self.config.ostrich_exe
-        working_dir = self.config.ostrich_path
-        
-        command = f"mpiexec -n {self.comm.Get_size()} {ostrich_exe}"
-        
-        self.logger.info(f"Running Ostrich with command: {command}")
-        
-        try:
-            result = subprocess.run(command, shell=True, check=True, cwd=working_dir, 
-                                    capture_output=True, text=True)
-            self.logger.info("Ostrich optimization completed successfully")
-            return True
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Ostrich optimization failed with error: {e}")
-            self.logger.error(f"Ostrich output: {e.output}")
-            return False
+        ostrich_path = Path(self.config.ostrich_path)
+        ostrich_exe = ostrich_path / self.config.ostrich_exe
+
+        if self.use_mpi:
+            # For MPI version, all processes participate
+            mpi_command = f"mpiexec -n {self.size} {ostrich_exe}"
+            self.logger.info(f"Running Ostrich with MPI: {mpi_command}")
+            result = self.comm.bcast(subprocess.run(mpi_command, shell=True, check=True, capture_output=True, text=True, cwd=ostrich_path) if self.rank == 0 else None, root=0)
+        else:
+            # For serial version, only root process runs Ostrich
+            if self.rank == 0:
+                ostrich_command = f"{ostrich_exe}"
+                self.logger.info(f"Running Ostrich in serial mode: {ostrich_command}")
+                result = subprocess.run(ostrich_command, shell=True, check=True, capture_output=True, text=True, cwd=ostrich_path)
+            else:
+                result = None
+
+        if self.rank == 0:
+            self.logger.info(f"Ostrich run completed with return code: {result.returncode}")
+            if result.stdout:
+                self.logger.debug(f"Ostrich stdout: {result.stdout}")
+            if result.stderr:
+                self.logger.warning(f"Ostrich stderr: {result.stderr}")
+
+        self.comm.Barrier()  # Ensure all processes wait for Ostrich to complete
 
     def parse_ostrich_results(self):
-        self.logger.info("Parsing Ostrich results")
+        ostrich_output = Path(self.config.ostrich_path) / 'OstOutput0.txt'
         
-        ostrich_output = self.config.ostrich_path / 'OstOutput0.txt'
+        if self.rank == 0:
+            with open(ostrich_output, 'r') as f:
+                lines = f.readlines()
+            
+            # Find the line with the best parameter set
+            best_line = None
+            for line in reversed(lines):
+                if line.strip().startswith('0'):
+                    best_line = line
+                    break
+            
+            if best_line is None:
+                raise ValueError("Could not find best parameter set in Ostrich output")
+            
+            parts = best_line.split()
+            best_value = float(parts[1])
+            best_params = [float(p) for p in parts[2:]]
+            
+            self.logger.info(f"Best objective value: {best_value}")
+            self.logger.info(f"Best parameters: {best_params}")
+        else:
+            best_value = None
+            best_params = None
         
-        if not ostrich_output.exists():
-            self.logger.error(f"Ostrich output file not found: {ostrich_output}")
-            return None, None
+        # Broadcast results to all processes
+        best_value = self.comm.bcast(best_value, root=0)
+        best_params = self.comm.bcast(best_params, root=0)
         
-        best_params = {}
-        best_objective = float('inf')
-        
-        with open(ostrich_output, 'r') as f:
-            for line in f:
-                if line.startswith('Best Parameter Set'):
-                    # Parse best parameters
-                    for _ in range(len(self.config.params_to_calibrate)):
-                        param_line = next(f).strip().split()
-                        param_name = param_line[0].replace('_multp', '')
-                        param_value = float(param_line[1])
-                        best_params[param_name] = param_value
-                elif line.startswith('Corresponding Objective Function'):
-                    best_objective = float(line.split('=')[1].strip())
-        
-        self.logger.info(f"Best objective value: {best_objective}")
-        self.logger.info(f"Best parameters: {best_params}")
-        
-        return best_params, best_objective
+        return best_params, best_value
 
     def update_trial_params(self):
         self.logger.info("Updating trial parameters")
 
         # Read multiplier values
-        multipliers_file = self.config.calib_path / 'multipliers.txt'
+
+        multipliers_file = self.config.ostrich_path / 'multipliers.txt'
         with open(multipliers_file, 'r') as f:
             multipliers = [float(line.strip()) for line in f]
 
@@ -322,9 +340,9 @@ EndAlgOptions
         self.logger.info("Running model and calculating objective function")
 
         # Update trial parameters
-        if not self.update_trial_params():
-            self.logger.error("Failed to update trial parameters")
-            return float('inf')  # Return a large value to indicate failure
+        self.update_trial_params()
+            #self.logger.error("Failed to update trial parameters")
+            #return float('inf')  # Return a large value to indicate failure
 
         # Run SUMMA
         summa_success = self.run_summa()
@@ -345,8 +363,8 @@ EndAlgOptions
         return objective_value
 
     def run_summa(self):
-        summa_exe = self.config.summa_exe_path
-        file_manager = self.get_summa_settings_path() / self.config.summa_filemanager
+        summa_exe = f'{self.config.root_path}/installs/summa/bin/{self.config.exe_name_summa}'
+        file_manager = self.get_summa_settings_path() / self.config.settings_summa_filemanager
         cmd = f"{summa_exe} -m {file_manager}"
         
         self.logger.info(f"Running SUMMA with command: {cmd}")
@@ -354,7 +372,7 @@ EndAlgOptions
         return result.returncode == 0
 
     def run_mizuroute(self):
-        mizuroute_exe = self.config.mizuroute_exe_path
+        mizuroute_exe = f'{self.config.root_path}/installs/mizuroute/route/bin/{self.config.exe_name_mizuroute}'
         control_file = self.get_mizuroute_settings_path() / self.config.mizu_control_file
         cmd = f"{mizuroute_exe} {control_file}"
         
@@ -370,6 +388,32 @@ EndAlgOptions
         rank_specific_path = self.get_rank_specific_path(Path(self.config.root_path) / f"domain_{self.config.domain_name}", 
                                                          rank_experiment_id, "SUMMA")
         return rank_specific_path / "run_settings"
+
+    def get_mizuroute_settings_path(self) -> Path:
+        rank_experiment_id = f"{self.config.experiment_id}_rank{self.rank + 1}"
+        rank_specific_path = self.get_rank_specific_path(Path(self.config.root_path) / f"domain_{self.config.domain_name}", 
+                                                         rank_experiment_id, "mizuRoute")
+        return rank_specific_path / "run_settings"
+
+    def update_ostrich_config_for_calibration(self):
+        if self.rank == 0:  # Only root process updates the config
+            ostrich_config_path = Path(self.config.ostrich_path) / 'ostIn.txt'
+
+            with open(ostrich_config_path, 'r') as f:
+                lines = f.readlines()
+
+            for i, line in enumerate(lines):
+                if 'BeginPeriod' in line:
+                    lines[i+1] = f"   {self.config.calib_period[0].strftime('%Y-%m-%d %H:%M')}\n"
+                    lines[i+2] = f"   {self.config.calib_period[1].strftime('%Y-%m-%d %H:%M')}\n"
+                    break
+
+            with open(ostrich_config_path, 'w') as f:
+                f.writelines(lines)
+
+            self.logger.info(f"Updated Ostrich config for calibration period: {self.config.calib_period[0]} to {self.config.calib_period[1]}")
+
+        self.comm.Barrier()  # Ensure all processes wait for config update
 
     def generate_priori_trial_params(self):
         self.logger.info("Generating a priori trial parameters")
@@ -388,6 +432,8 @@ EndAlgOptions
         # Extract a priori parameter values and create trialParam.priori.nc
         self.create_priori_trial_param_file(summa_settings_path)
         
+        self.reset_file_manager(summa_settings_path)
+
         self.logger.info("A priori trial parameters generated successfully")
 
     def update_output_control(self, settings_path):
@@ -415,6 +461,23 @@ EndAlgOptions
         
         sim_start_time = self.config.calib_period[0]
         sim_end_time = (sim_start_time + datetime.timedelta(days=1)).strftime('%Y-%m-%d %H:%M')
+        
+        with open(file_manager, 'r') as src, open(file_manager_temp, 'w') as dst:
+            for line in src:
+                if line.startswith('simStartTime'):
+                    line = f"simStartTime '{sim_start_time}'\n"
+                elif line.startswith('simEndTime'):
+                    line = f"simEndTime '{sim_end_time}'\n"
+                dst.write(line)
+        
+        shutil.move(file_manager_temp, file_manager)
+
+    def reset_file_manager(self, settings_path):
+        file_manager = settings_path / self.config.settings_summa_filemanager
+        file_manager_temp = file_manager.with_suffix('.temp')
+        
+        sim_start_time = (self.config.calib_period[0] - datetime.timedelta(days=365))
+        sim_end_time = self.config.eval_period[1]
         
         with open(file_manager, 'r') as src, open(file_manager_temp, 'w') as dst:
             for line in src:
@@ -554,12 +617,10 @@ EndAlgOptions
         return [multp_initial, multp_min, multp_max]
 
     def calculate_basin_param_bounds(self, param, bounds, a_priori):
-        # Similar to calculate_local_param_bounds, but may have special cases
-        # For example, routingGammaScale might need special handling
         return self.calculate_local_param_bounds(param, bounds, a_priori)
 
     def save_multiplier_bounds(self, multp_bounds_list):
-        output_file = Path(self.config.root_path) / f"domain_{self.config.domain_name}" / "optimisation" / 'multiplier_bounds.txt'
+        output_file = self.config.ostrich_path / 'multiplier_bounds.txt'
         output_file.parent.mkdir(parents=True, exist_ok=True)
         with open(output_file, 'w') as f:
             f.write('# MultiplierName,InitialValue,LowerLimit,UpperLimit\n')

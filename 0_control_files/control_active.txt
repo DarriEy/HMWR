@@ -222,8 +222,8 @@ modis_ndsi_threshold        | 5
 
 # Ostrich settings
 ostrich_path                | /Users/darrieythorsson/compHydro/data/CWARHM_data/installs/Ostrich_v17.12.19/Source/  # Path to ostrich executable 
-ostrich_exe                 | Ostrich
-ostrich_algorithm            | DDS                                     # Options: DDS, PADDS, PSO, APPSO
+ostrich_exe                 | OstrichMPI
+ostrich_algorithm            | PSO                                     # Options: DDS, PADDS, PSO, APPSO
 ostrich_metric               | GCOP                                    # Options: GCOP (single-objective), PATO (multi-objective)
 ostrich_swarm_size           | 20                                      # For PSO/APPSO algorithms
 ostrich_output_file          | ostrich_output.txt                      # Name of OSTRICH output file

@@ -5,9 +5,6 @@ from typing import List, Tuple
 import numpy as np # type: ignore
 from datetime import datetime
 from typing import Union
-import subprocess
-import os
-import glob
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from utils.logging_utils import get_logger # type: ignore
@@ -15,6 +12,7 @@ from utils.optimisation_utils import run_nsga2, run_nsga3, run_moead, run_smsemo
 from utils.config import initialize_config, Config # type: ignore
 from utils.results_utils import Results # type: ignore
 from utils.parallel_utils import Worker # type: ignore
+from ostrich_util import OstrichOptimizer
 
 class Optimizer:
 
@@ -201,20 +199,10 @@ class Optimizer:
         return best_params, best_values
 
     def run_ostrich_optimization(self) -> Tuple[List[float], float]:
-        self.prepare_ostrich_files()
-        self.run_ostrich()
-        return self.parse_ostrich_results()
-
-    def prepare_ostrich_files(self):
-        pass
-    
-    def run_ostrich(self):
-        ostrich_command = f"mpiexec -n {self.size} {self.config.ostrich_path}/{self.config.ostrich_exe}"
-        result = subprocess.run(ostrich_command, shell=True, check=True, capture_output=True, text=True)
-        pass   
-
-    def parse_ostrich_results(self) -> Tuple[List[float], float]:
-        pass
+        ostrich_optimizer = OstrichOptimizer(self.config, self.comm, self.rank)
+        ostrich_optimizer.prepare_ostrich_files()
+        ostrich_optimizer.run_ostrich()
+        return ostrich_optimizer.parse_ostrich_results()
 
 def main() -> None:
     """

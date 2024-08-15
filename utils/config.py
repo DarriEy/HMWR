@@ -112,11 +112,13 @@ class Config:
     exe_name_summa: str
     output_path: str
     output_prefix: str
-    root_code_path: str
+    root_code_path: Path
+    exe_name_mizuroute: str
+    use_mpi: bool
     
 
 def initialize_config(rank: int, comm: MPI.Comm) -> Config:
-    control_folder = Path('../../0_control_files')
+    control_folder = Path('/Users/darrieythorsson/compHydro/code/CWARHM/0_control_files/')
     control_file = 'control_active.txt'
 
     if rank == 0:
@@ -167,6 +169,7 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         catchment_shp_name = read_from_control(control_folder/control_file, 'catchment_shp_name')
         ostrich_path = Path(read_from_control(control_folder/control_file, 'ostrich_path'))
         ostrich_exe = read_from_control(control_folder/control_file, 'ostrich_exe')
+        use_mpi = ostrich_exe.lower().endswith('mpi')
         ostrich_algorithm = read_from_control(control_folder/control_file, 'ostrich_algorithm')
         ostrich_metric = read_from_control(control_folder/control_file, 'ostrich_metric')
         ostrich_swarm_size = int(read_from_control(control_folder/control_file, 'ostrich_swarm_size'))
@@ -177,7 +180,8 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         exe_name_summa = read_from_control(control_folder/control_file, 'exe_name_summa')
         output_path = read_from_control(control_folder/control_file, 'output_path')
         output_prefix = read_from_control(control_folder/control_file, 'output_prefix')
-        root_code_path = read_from_control(control_folder/control_file, 'root_code_path')
+        root_code_path = Path(read_from_control(control_folder/control_file, 'root_code_path'))
+        exe_name_mizuroute = read_from_control(control_folder/control_file, 'exe_name_mizuroute')
 
     else:
         ostrich_algorithm = None
@@ -233,6 +237,8 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         output_path = None
         output_prefix = None
         root_code_path = None
+        exe_name_mizuroute = None
+        use_mpi = None
 
     config = Config(
         root_path=comm.bcast(root_path, root=0),
@@ -287,7 +293,9 @@ def initialize_config(rank: int, comm: MPI.Comm) -> Config:
         exe_name_summa=comm.bcast(exe_name_summa,root=0),
         output_path=comm.bcast(output_path,root=0),
         output_prefix=comm.bcast(output_prefix,root=0),
-        root_code_path=comm.bcast(root_code_path,root=0)
+        root_code_path=comm.bcast(root_code_path,root=0),
+        exe_name_mizuroute=comm.bcast(exe_name_mizuroute,root=0),
+        use_mpi = comm.bcast(use_mpi,root=0)
     )
 
     return config
